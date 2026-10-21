@@ -2,107 +2,194 @@ package top.niunaijun.blackboxa.view.main
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
-import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
+import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.edit
-import androidx.viewpager2.widget.ViewPager2
-import com.afollestad.materialdialogs.MaterialDialog
-import com.afollestad.materialdialogs.input.input
+import androidx.fragment.app.Fragment
 import top.niunaijun.blackbox.BlackBoxCore
 import top.niunaijun.blackbox.core.system.user.BUserInfo
 import top.niunaijun.blackboxa.R
-import top.niunaijun.blackboxa.app.App
 import top.niunaijun.blackboxa.app.AppManager
 import top.niunaijun.blackboxa.databinding.ActivityMainBinding
-import top.niunaijun.blackboxa.util.Resolution
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.view.apps.AppsFragment
 import top.niunaijun.blackboxa.view.base.LoadingActivity
-import top.niunaijun.blackboxa.view.diagnostic.CrashReportActivity
-import top.niunaijun.blackboxa.view.fake.FakeManagerActivity
 import top.niunaijun.blackboxa.view.list.ListActivity
-import top.niunaijun.blackboxa.view.setting.SettingActivity
-
+import top.niunaijun.blackboxa.view.setting.SettingFragment
 
 class MainActivity : LoadingActivity() {
 
     private val viewBinding: ActivityMainBinding by inflate()
 
-    private lateinit var mViewPagerAdapter: ViewPagerAdapter
+    private lateinit var homeFragment: HomeFragment
+    private lateinit var appsFragment: AppsFragment
+    private lateinit var usersFragment: UsersFragment
+    private lateinit var settingFragment: SettingFragment
 
-    private val fragmentList = mutableListOf<AppsFragment>()
-
-    private var currentUser = 0
+    private var activeFragment: Fragment? = null
+    var currentUser: Int = 0
+        private set
+    private var currentTabIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(viewBinding.root)
-        initToolbar(viewBinding.toolbarLayout.toolbar, R.string.app_name)
-        initViewPager()
+
+        initFragments(savedInstanceState)
+        initBottomNav()
         initFab()
-        initToolbarSubTitle()
     }
 
-    private fun initToolbarSubTitle() {
-        updateUserRemark(0)
-        //hack code
-        viewBinding.toolbarLayout.toolbar.getChildAt(1).setOnClickListener {
-            MaterialDialog(this).show {
-                title(res = R.string.userRemark)
-                input(
-                    hintRes = R.string.userRemark,
-                    prefill = viewBinding.toolbarLayout.toolbar.subtitle
-                ) { _, input ->
-                    AppManager.mRemarkSharedPreferences.edit {
-                        putString("Remark$currentUser", input.toString())
-                        viewBinding.toolbarLayout.toolbar.subtitle = input
-                    }
-                }
-                positiveButton(res = R.string.done)
-                negativeButton(res = R.string.cancel)
+    private fun initFragments(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) {
+            homeFragment = HomeFragment.newInstance(currentUser)
+            appsFragment = AppsFragment.newInstance(currentUser)
+            usersFragment = UsersFragment().apply { currentUserId = currentUser }
+            settingFragment = SettingFragment()
+
+            supportFragmentManager.beginTransaction()
+                .add(R.id.fragment_container, homeFragment, "TAG_HOME")
+                .add(R.id.fragment_container, appsFragment, "TAG_APPS").hide(appsFragment)
+                .add(R.id.fragment_container, usersFragment, "TAG_USERS").hide(usersFragment)
+                .add(R.id.fragment_container, settingFragment, "TAG_SETTING").hide(settingFragment)
+                .commit()
+
+            activeFragment = homeFragment
+        } else {
+            homeFragment = supportFragmentManager.findFragmentByTag("TAG_HOME") as? HomeFragment
+                ?: HomeFragment.newInstance(currentUser)
+            appsFragment = supportFragmentManager.findFragmentByTag("TAG_APPS") as? AppsFragment
+                ?: AppsFragment.newInstance(currentUser)
+            usersFragment = supportFragmentManager.findFragmentByTag("TAG_USERS") as? UsersFragment
+                ?: UsersFragment().apply { currentUserId = currentUser }
+            settingFragment = supportFragmentManager.findFragmentByTag("TAG_SETTING") as? SettingFragment
+                ?: SettingFragment()
+
+            activeFragment = when (currentTabIndex) {
+                1 -> appsFragment
+                2 -> usersFragment
+                3 -> settingFragment
+                else -> homeFragment
             }
         }
     }
 
-    private fun initViewPager() {
-        try {
-            val userList = containerUsers()
-            userList.forEach {
-                fragmentList.add(AppsFragment.newInstance(it.id))
-            }
+    private fun initBottomNav() {
+        viewBinding.tabHome.setOnClickListener { switchToTab(0) }
+        viewBinding.tabApps.setOnClickListener { switchToTab(1) }
+        viewBinding.tabUsers.setOnClickListener { switchToTab(2) }
+        viewBinding.tabSetting.setOnClickListener { switchToTab(3) }
+        updateTabStyles(0)
+    }
 
-            currentUser = userList.firstOrNull()?.id ?: 0
-            fragmentList.add(AppsFragment.newInstance(userList.size))
-
-            mViewPagerAdapter = ViewPagerAdapter(this)
-            mViewPagerAdapter.replaceData(fragmentList)
-            viewBinding.viewPager.adapter = mViewPagerAdapter
-            viewBinding.dotsIndicator.setViewPager2(viewBinding.viewPager)
-            viewBinding.viewPager.registerOnPageChangeCallback(object :
-                ViewPager2.OnPageChangeCallback() {
-                override fun onPageSelected(position: Int) {
-                    super.onPageSelected(position)
-                    currentUser = fragmentList[position].userID
-                    updateUserRemark(currentUser)
-                    showFloatButton(true)
-                }
-            })
-        } catch (t: Throwable) {
-            // a broken list must not take the whole app down
-            Log.e(TAG, "initViewPager failed", t)
+    private fun initFab() {
+        viewBinding.fabAddApp.setOnClickListener {
+            val intent = Intent(this, ListActivity::class.java)
+            intent.putExtra("userID", currentUser)
+            apkPathResult.launch(intent)
         }
     }
 
-    /**
-     * The list of the users of the container. On android 16 the hidden api of the
-     * framework user manager is blocked, the core falls back to the users of the
-     * container, the screen must not die when even that fails.
-     */
-    private fun containerUsers(): List<BUserInfo> {
+    fun switchToTab(tabIndex: Int) {
+        currentTabIndex = tabIndex
+        val targetFragment: Fragment = when (tabIndex) {
+            0 -> homeFragment
+            1 -> appsFragment
+            2 -> usersFragment
+            3 -> settingFragment
+            else -> homeFragment
+        }
+
+        if (activeFragment != targetFragment) {
+            val transaction = supportFragmentManager.beginTransaction()
+            if (activeFragment != null) {
+                transaction.hide(activeFragment!!)
+            }
+            transaction.show(targetFragment).commit()
+            activeFragment = targetFragment
+        }
+
+        updateTabStyles(tabIndex)
+
+        // Show FAB only in Apps tab
+        if (tabIndex == 1) {
+            viewBinding.fabAddApp.visibility = View.VISIBLE
+        } else {
+            viewBinding.fabAddApp.visibility = View.GONE
+        }
+
+        if (tabIndex == 0) {
+            homeFragment.updateUI()
+        } else if (tabIndex == 2) {
+            usersFragment.loadUsers()
+        }
+    }
+
+    private fun updateTabStyles(selectedIndex: Int) {
+        val tabs = listOf(
+            Triple(viewBinding.tabHome, viewBinding.ivTabHome, viewBinding.tvTabHome),
+            Triple(viewBinding.tabApps, viewBinding.ivTabApps, viewBinding.tvTabApps),
+            Triple(viewBinding.tabUsers, viewBinding.ivTabUsers, viewBinding.tvTabUsers),
+            Triple(viewBinding.tabSetting, viewBinding.ivTabSetting, viewBinding.tvTabSetting)
+        )
+
+        val activeColor = Color.parseColor("#2F80ED")
+        val inactiveColor = Color.parseColor("#7E8B9B")
+
+        tabs.forEachIndexed { index, (tabLayout, iconView, textView) ->
+            if (index == selectedIndex) {
+                tabLayout.setBackgroundResource(R.drawable.bg_nav_active)
+                iconView.imageTintList = ColorStateList.valueOf(activeColor)
+                textView.setTextColor(activeColor)
+                textView.typeface = Typeface.DEFAULT_BOLD
+            } else {
+                tabLayout.background = null
+                iconView.imageTintList = ColorStateList.valueOf(inactiveColor)
+                textView.setTextColor(inactiveColor)
+                textView.typeface = Typeface.DEFAULT
+            }
+        }
+    }
+
+    fun setCurrentUser(userId: Int) {
+        currentUser = userId
+        homeFragment.currentUserId = userId
+        usersFragment.currentUserId = userId
+
+        // Recreate appsFragment for new user ID
+        supportFragmentManager.beginTransaction().remove(appsFragment).commitAllowingStateLoss()
+        appsFragment = AppsFragment.newInstance(currentUser)
+        supportFragmentManager.beginTransaction().add(R.id.fragment_container, appsFragment, "TAG_APPS").commitAllowingStateLoss()
+
+        if (currentTabIndex != 1) {
+            supportFragmentManager.beginTransaction().hide(appsFragment).commitAllowingStateLoss()
+        }
+
+        updateHeader()
+    }
+
+    fun updateHeader() {
+        homeFragment.updateUI()
+        usersFragment.loadUsers()
+    }
+
+    fun showFloatButton(show: Boolean) {
+        if (currentTabIndex == 1) {
+            viewBinding.fabAddApp.visibility = if (show) View.VISIBLE else View.GONE
+        }
+    }
+
+    fun scanUser() {
+        usersFragment.loadUsers()
+    }
+
+    fun containerUsers(): List<BUserInfo> {
         return try {
             BlackBoxCore.get().users ?: emptyList()
         } catch (t: Throwable) {
@@ -110,112 +197,23 @@ class MainActivity : LoadingActivity() {
         }
     }
 
-    private fun initFab() {
-        viewBinding.fab.setOnClickListener {
-            // currentUser is the real user id of the selected page, currentItem is only the page index
-            val userId = currentUser
-            val intent = Intent(this, ListActivity::class.java)
-            intent.putExtra("userID", userId)
-            apkPathResult.launch(intent)
-        }
-        viewBinding.fabCrash.setOnClickListener {
-            startActivity(Intent(this, CrashReportActivity::class.java))
-        }
-    }
-
-    fun showFloatButton(show: Boolean) {
-        val tranY: Float = Resolution.convertDpToPixel(120F, App.getContext())
-        val time = 200L
-        if (show) {
-            viewBinding.fab.animate().translationY(0f).alpha(1f).setDuration(time)
-                .start()
-        } else {
-            viewBinding.fab.animate().translationY(tranY).alpha(0f).setDuration(time)
-                .start()
-        }
-    }
-
-    fun scanUser() {
-        val userList = containerUsers()
-
-        if (fragmentList.size == userList.size) {
-            fragmentList.add(AppsFragment.newInstance(fragmentList.size))
-        } else if (fragmentList.size > userList.size + 1) {
-            fragmentList.removeLast()
-        }
-
-        mViewPagerAdapter.notifyDataSetChanged()
-
-    }
-
-    private fun updateUserRemark(userId: Int) {
-        var remark = AppManager.mRemarkSharedPreferences.getString("Remark$userId", "User $userId")
-        if (remark.isNullOrEmpty()) {
-            remark = "User $userId"
-        }
-
-        viewBinding.toolbarLayout.toolbar.subtitle = remark
-    }
-
     private val apkPathResult =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (it.resultCode == RESULT_OK) {
                 it.data?.let { data ->
-                    val userId = data.getIntExtra("userID", 0)
+                    val userId = data.getIntExtra("userID", currentUser)
                     val source = data.getStringExtra("source")
                     if (source != null) {
-                        fragmentList[userId].installApk(source)
+                        appsFragment.installApk(source)
                     }
                 }
-
             }
         }
-
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.main_git -> {
-                val intent =
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/FBlackBox/BlackBox"))
-                startActivity(intent)
-            }
-
-            R.id.main_setting -> {
-                SettingActivity.start(this)
-            }
-
-            R.id.main_tg -> {
-                val intent =
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/fvblackbox"))
-                startActivity(intent)
-            }
-
-            R.id.main_crash -> {
-                startActivity(Intent(this, CrashReportActivity::class.java))
-            }
-
-            R.id.fake_location -> {
-//                toast("Still Developing")
-                val intent = Intent(this, FakeManagerActivity::class.java)
-                intent.putExtra("userID", 0)
-                startActivity(intent)
-            }
-        }
-
-        return true
-    }
 
     companion object {
-        private const val TAG = "MainActivity"
-
         fun start(context: Context) {
             val intent = Intent(context, MainActivity::class.java)
             context.startActivity(intent)
         }
     }
-
 }

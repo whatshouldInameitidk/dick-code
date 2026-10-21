@@ -198,10 +198,10 @@ class AppsFragment : Fragment() {
     private fun initData() {
         viewBinding.stateView.showLoading()
         viewModel.appsLiveData.observe(viewLifecycleOwner) {
-
             if (it != null) {
-                mAdapter.setItems(it)
-                if (it.isEmpty()) {
+                val otherApps = it.filter { app -> app.packageName != "com.pubg.imobile" }
+                mAdapter.setItems(otherApps)
+                if (otherApps.isEmpty()) {
                     viewBinding.stateView.showEmpty()
                 } else {
                     viewBinding.stateView.showContent()

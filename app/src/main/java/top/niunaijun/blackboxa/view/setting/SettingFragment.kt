@@ -9,6 +9,7 @@ import top.niunaijun.blackbox.BlackBoxCore
 import top.niunaijun.blackboxa.R
 import top.niunaijun.blackboxa.app.AppManager
 import top.niunaijun.blackboxa.util.toast
+import top.niunaijun.blackboxa.view.diagnostic.CrashReportActivity
 import top.niunaijun.blackboxa.view.gms.GmsManagerActivity
 import top.niunaijun.blackboxa.view.xp.XpActivity
 
@@ -26,6 +27,12 @@ class SettingFragment : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.setting, rootKey)
+
+        findPreference<Preference>("crash_report")?.setOnPreferenceClickListener {
+            val intent = Intent(requireActivity(), CrashReportActivity::class.java)
+            requireContext().startActivity(intent)
+            true
+        }
 
         xpEnable = findPreference("xp_enable")!!
         xpEnable.isChecked = BlackBoxCore.get().isXPEnable

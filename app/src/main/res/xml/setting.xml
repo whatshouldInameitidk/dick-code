@@ -2,6 +2,16 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="Diagnostics">
+
+        <Preference
+                android:key="crash_report"
+                app:icon="@drawable/ic_report"
+                android:title="Crash Reporter"
+                android:summary="View system and virtual app crash logs"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/xp_setting">
 
         <SwitchPreferenceCompat

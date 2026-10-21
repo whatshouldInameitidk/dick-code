@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Outer isometric box outline -->
+    <path
+        android:strokeColor="#203875FF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:pathData="M60,10 L108,37 L108,83 L60,110 L12,83 L12,37 Z" />
+    <path
+        android:strokeColor="#203875FF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:pathData="M60,60 L108,37 M60,60 L12,37 M60,60 L60,110" />
+
+    <!-- Inner glowing isometric box -->
+    <path
+        android:strokeColor="#604D88FF"
+        android:strokeWidth="2"
+        android:fillColor="#0A205099"
+        android:pathData="M60,28 L92,46 L92,76 L60,94 L28,76 L28,46 Z" />
+    <path
+        android:strokeColor="#805494FF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M60,60 L92,46 M60,60 L28,46 M60,60 L60,94" />
+
+    <!-- Center core box -->
+    <path
+        android:strokeColor="#FF4796FF"
+        android:strokeWidth="2.5"
+        android:fillColor="#332B75FF"
+        android:pathData="M60,45 L76,54 L76,69 L60,78 L44,69 L44,54 Z" />
+    <path
+        android:strokeColor="#FF4796FF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M60,61.5 L76,54 M60,61.5 L44,54 M60,61.5 L60,78" />
+</vector>
