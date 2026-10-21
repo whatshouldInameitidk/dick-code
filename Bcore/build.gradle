@@ -1,0 +1,127 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'top.niunaijun.blackbox'
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    ndkVersion "29.0.13846066"
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+
+        consumerProguardFiles "consumer-rules.pro"
+        ndk {
+            // three ABIs, same as upstream: armeabi-v7a, arm64-v8a, x86
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path file('./src/main/cpp/CMakeLists.txt')
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        // AGP 8 no longer enables the AIDL compiler by default; Bcore ships
+        // its own IPC interfaces (IBActivityThread, IBAccountManagerService,
+        // IBPackageManagerService, ...) under src/main/aidl.
+        aidl true
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+        warningsAsErrors false
+        disable += ["UnusedResources", "RestrictedApi"]
+        textOutput = file("stdout")
+        textReport = false
+    }
+}
+
+
+tasks.withType(Javadoc) {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.addStringOption('encoding', 'UTF-8')
+    options.addStringOption('charSet', 'UTF-8')
+}
+
+
+// AIDL include path -----------------------------------------------------------------
+// AGP 8 only hands *parcelable* AIDL across a project dependency (the
+// android-mirror AIDL_PARCELABLE artifact), so the framework interfaces that
+// Bcore's own AIDL imports - android.accounts.IAccountManagerResponse
+// (IBAccountManagerService) and android.app.IServiceConnection
+// (IBActivityManagerService) - stay invisible to aidl.exe even though
+// android-mirror compiles them.
+//
+// AidlCompile turns sourceDirs + importDirs into the aidl -I include list, but
+// only the files below sourceDirs are compiled. sourceDirs is finalized by AGP
+// (setDisallowChanges), importDirs is a plain field that is read when the task
+// runs, so appending android-mirror's AIDL sources there resolves the imports
+// without compiling them a second time: the generated android.* classes are
+// still produced by android-mirror alone and exist exactly once in the APK.
+def mirrorAidlDir = rootProject.file('android-mirror/src/main/aidl')
+
+tasks.withType(com.android.build.gradle.tasks.AidlCompile).configureEach { aidlTask ->
+    aidlTask.doFirst {
+        // AidlCompile keeps its import folders in a private field without a
+        // setter; reach it directly so the mirror's AIDL joins the -I list.
+        def type = aidlTask.getClass()
+        def field = null
+        while (type != null && field == null) {
+            try {
+                field = type.getDeclaredField('importDirs')
+            } catch (NoSuchFieldException ignored) {
+                type = type.superclass
+            }
+        }
+        if (field == null) {
+            throw new GradleException('AidlCompile.importDirs not found - AIDL include path cannot be patched')
+        }
+        field.setAccessible(true)
+        field.set(aidlTask, field.get(aidlTask).plus(project.files(mirrorAidlDir)))
+    }
+}
+
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+
+    implementation 'me.weishu:free_reflection:3.0.1'
+    implementation "com.github.CodingGay.BlackReflection:core:$rootProject.ext.blackReflection"
+    implementation project(':Bcore:black-fake')
+    implementation project(':Bcore:black-hook')
+    implementation project(':android-mirror')
+
+    implementation project(':Bcore:pine-core')
+    implementation project(':Bcore:pine-xposed')
+    implementation project(':Bcore:pine-xposed-res')
+
+    // Compile-only hidden-API surface (android.content.pm.PackageParser,
+    // android.app.ActivityThread, ...). Never packaged: on device the real
+    // framework classes are loaded from the boot classpath.
+    //
+    // This is the Bcore-specific variant of the stub jar: it leaves out every
+    // class that Bcore/black-fake fakes itself (PackageParser & co). The
+    // container ships those fakes, so they - not the API 33 originals - have to
+    // be the ones Bcore compiles against (PackageParser.Package.mSignatures
+    // only exists on the fake). android-mirror keeps the full stub jar: its
+    // black.android.* mirrors model the real framework classes.
+    compileOnly files(rootProject.file("stubs/bcore-hidden-api-stubs.jar"))
+}

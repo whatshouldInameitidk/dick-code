@@ -1,0 +1,57 @@
+apply plugin: 'com.android.library'
+
+// Mirror of the hidden Android framework classes the container has to load
+// through its own class loader. Upstream ships this directory without a
+// build script, which makes `project(':android-mirror')` unresolvable.
+android {
+    namespace 'top.niunaijun.android_mirror'
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion rootProject.ext.targetSdkVersion
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    buildFeatures {
+        aidl true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+        warningsAsErrors false
+        disable += ["UnusedResources", "RestrictedApi"]
+        textOutput = file("stdout")
+        textReport = false
+    }
+}
+
+dependencies {
+    // The mirrored stubs carry BlackReflection annotations, the same artifact
+    // Bcore itself compiles against.
+    implementation "com.github.CodingGay.BlackReflection:core:$rootProject.ext.blackReflection"
+
+    // BlackReflection's annotation processor turns the @BClassName interfaces
+    // in black/android/** into the BR* reflection holders (BRActivityThread,
+    // BRAssetManager, BRPackageParser, ...) that Bcore and pine-xposed-res
+    // import.
+    annotationProcessor "com.github.CodingGay.BlackReflection:compiler:$rootProject.ext.blackReflection"
+
+    // Compile-only hidden-API surface (android.content.pm.PackageParser,
+    // android.app.ActivityThread, com.android.internal.util.XmlUtils, ...).
+    // The classes only need to exist at compile time: on device the real
+    // framework provides them through the boot classpath.
+    compileOnly files(rootProject.file("stubs/hidden-api-stubs.jar"))
+}
