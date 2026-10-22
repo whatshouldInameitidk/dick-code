@@ -3,6 +3,14 @@ package top.niunaijun.blackboxa.view.main
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.graphics.Color
+import android.widget.TextView
+import android.widget.PopupWindow
+import android.widget.ProgressBar
+import android.widget.LinearLayout
+import android.widget.FrameLayout
+import android.view.Window
+import android.graphics.drawable.ColorDrawable
+import android.app.Dialog
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -319,34 +327,145 @@ class HomeFragment : Fragment() {
     }
 
     private fun promptAutoCopyObbAndLaunch(sourceFile: File) {
-        val sizeStr = ObbManager.formatFileSize(sourceFile.length())
-        MaterialDialog(requireContext()).show {
-            title(text = "Game Data (OBB) Detected")
-            message(text = "Found OBB game file:\n${sourceFile.name} ($sizeStr)\n\nWould you like to install it into Inverness virtual space now?")
-            positiveButton(text = "Install & Launch") {
-                copyObbFileAndLaunch(sourceFile)
-            }
-            neutralButton(text = "Select Another") {
-                openObbPicker()
-            }
-            negativeButton(res = R.string.cancel)
+        val context = context ?: return
+        val dialog = Dialog(context)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
+        dialog.setContentView(dialogView)
+
+        dialog.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
+
+        val sizeStr = if (sourceFile.exists() && sourceFile.length() > 0) ObbManager.formatFileSize(sourceFile.length()) else "1.1 GB" 
+        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
+        val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
+        val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
+        val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
+        val tvQuestionMessage = dialogView.findViewById<TextView>(R.id.tvQuestionMessage)
+        val layoutProgressSection = dialogView.findViewById<LinearLayout>(R.id.layoutProgressSection)
+        val layoutButtons = dialogView.findViewById<LinearLayout>(R.id.layoutButtons)
+        val layoutQuestionPrompt = dialogView.findViewById<LinearLayout>(R.id.layoutQuestionPrompt)
+        val pbObbProgress = dialogView.findViewById<ProgressBar>(R.id.pbObbProgress)
+        val tvProgressStatus = dialogView.findViewById<TextView>(R.id.tvProgressStatus)
+        val tvProgressPercent = dialogView.findViewById<TextView>(R.id.tvProgressPercent)
+
+        val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
+        val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
+        val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
+        val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
+        val tvSecondaryText = dialogView.findViewById<TextView>(R.id.tvSecondaryText)
+
+        tvDialogTitle.text = "Game Data (OBB)"
+        tvDialogSubtitle.text = "Detected"
+        tvFileCardLabel.text = "FOUND OBB GAME FILE:"
+        tvFileName.text = sourceFile.name
+        tvFileSize.text = "($sizeStr)"
+        tvQuestionMessage.text = "Would you like to install it into\nInverness virtual space now?"
+        tvPrimaryBtnText.text = "INSTALL & LAUNCH"
+        tvSecondaryText.text = "SELECT ANOTHER"
+
+        btnPrimaryAction.setOnClickListener {
+            dialog.setCancelable(false)
+            dialog.setCanceledOnTouchOutside(false)
+            layoutButtons.visibility = View.GONE
+            layoutQuestionPrompt.visibility = View.GONE
+            layoutProgressSection.visibility = View.VISIBLE
+            tvProgressStatus.text = "Copying ${sourceFile.name}..."
+            tvProgressPercent.text = "0%"
+            pbObbProgress.progress = 0
+
+            val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
+            val targetFile = File(targetDir, sourceFile.name)
+
+            Thread {
+                val success = ObbManager.copyFileWithProgress(sourceFile, targetFile) { percent, copied, total ->
+                    activity?.runOnUiThread {
+                        pbObbProgress.progress = percent
+                        tvProgressPercent.text = "$percent%"
+                        val formattedCopied = ObbManager.formatFileSize(copied)
+                        val formattedTotal = ObbManager.formatFileSize(total)
+                        tvProgressStatus.text = "Copying: $formattedCopied / $formattedTotal"
+                    }
+                }
+
+                activity?.runOnUiThread {
+                    dialog.dismiss()
+                    if (success) {
+                        toast("OBB installed successfully!")
+                        updateUI()
+                        performDirectLaunch()
+                    } else {
+                        toast("Failed to copy OBB file.")
+                    }
+                }
+            }.start()
+        }
+
+        btnDialogCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnDialogSecondary.setOnClickListener {
+            dialog.dismiss()
+            openObbPicker()
+        }
+
+        dialog.show()
     }
 
     private fun showObbMissingDialog() {
-        MaterialDialog(requireContext()).show {
-            title(text = "Game Data (OBB) Required")
-            message(text = "BATTLEGROUNDS MOBILE INDIA requires its OBB data file to start.\n\nOn Samsung & Android 14+ devices, system OBB folders are protected.\n\nHow to fix:\n• Tap 'Select OBB File' to choose your main.xxxx.com.pubg.imobile.obb file from Downloads or Storage.\n• Or use Samsung 'My Files' to copy the OBB file into your Download folder, then tap 'Auto-Scan'.")
-            positiveButton(text = "Select OBB File") {
-                openObbPicker()
-            }
-            neutralButton(text = "Auto-Scan") {
-                scanAndNotifyObb()
-            }
-            negativeButton(text = "Launch Anyway") {
-                performDirectLaunch()
-            }
+        val context = context ?: return
+        val dialog = Dialog(context)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
+        dialog.setContentView(dialogView)
+
+        dialog.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
+
+        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
+        val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
+        val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
+        val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
+        val tvQuestionMessage = dialogView.findViewById<TextView>(R.id.tvQuestionMessage)
+        val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
+        val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
+        val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
+        val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
+        val tvSecondaryText = dialogView.findViewById<TextView>(R.id.tvSecondaryText)
+
+        tvDialogTitle.text = "Game Data (OBB)"
+        tvDialogSubtitle.text = "Required"
+        tvFileCardLabel.text = "STATUS:"
+        tvFileName.text = "OBB File Not Found"
+        tvFileSize.text = "(Protected storage or not downloaded)"
+        tvQuestionMessage.text = "BGMI requires an OBB file to start.\nSelect OBB file or Auto-Scan if copied."
+        tvPrimaryBtnText.text = "SELECT OBB FILE"
+        tvSecondaryText.text = "AUTO-SCAN"
+
+        btnPrimaryAction.setOnClickListener {
+            dialog.dismiss()
+            openObbPicker()
+        }
+
+        btnDialogCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnDialogSecondary.setOnClickListener {
+            dialog.dismiss()
+            scanAndNotifyObb()
+        }
+
+        dialog.show()
     }
 
     private fun openObbPicker() {
@@ -358,31 +477,65 @@ class HomeFragment : Fragment() {
     }
 
     private fun handleSelectedObbUri(uri: Uri) {
-        val fileName = ObbManager.getUriFileName(requireContext(), uri, bgmiPackageName)
+        val context = context ?: return
+        val fileName = ObbManager.getUriFileName(context, uri, bgmiPackageName)
         val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
         val targetFile = File(targetDir, fileName)
 
-        val loading = MaterialDialog(requireContext()).apply {
-            title(text = "Installing OBB Data")
-            message(text = "Copying $fileName into virtual space... Please wait.")
-            cancelable(false)
-            show()
+        val dialog = Dialog(context)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
+        dialog.setContentView(dialogView)
+        dialog.setCancelable(false)
+        dialog.setCanceledOnTouchOutside(false)
+
+        dialog.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
+        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
+        val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
+        val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
+        val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
+        val layoutProgressSection = dialogView.findViewById<LinearLayout>(R.id.layoutProgressSection)
+        val layoutButtons = dialogView.findViewById<LinearLayout>(R.id.layoutButtons)
+        val layoutQuestionPrompt = dialogView.findViewById<LinearLayout>(R.id.layoutQuestionPrompt)
+        val pbObbProgress = dialogView.findViewById<ProgressBar>(R.id.pbObbProgress)
+        val tvProgressStatus = dialogView.findViewById<TextView>(R.id.tvProgressStatus)
+        val tvProgressPercent = dialogView.findViewById<TextView>(R.id.tvProgressPercent)
+
+        tvDialogTitle.text = "Game Data (OBB)"
+        tvDialogSubtitle.text = "Installing..."
+        tvFileCardLabel.text = "SELECTED OBB FILE:"
+        tvFileName.text = fileName
+        tvFileSize.text = "(Storage Picker)"
+        layoutButtons.visibility = View.GONE
+        layoutQuestionPrompt.visibility = View.GONE
+        layoutProgressSection.visibility = View.VISIBLE
+        tvProgressStatus.text = "Copying $fileName into virtual space..."
+        tvProgressPercent.text = "0%"
+
+        dialog.show()
+
         Thread {
-            val success = ObbManager.copyUriWithProgress(requireContext(), uri, targetFile) { percent, copied, total ->
+            val success = ObbManager.copyUriWithProgress(context, uri, targetFile) { percent, copied, total ->
                 activity?.runOnUiThread {
+                    pbObbProgress.progress = percent
+                    tvProgressPercent.text = "$percent%"
                     val progressMsg = if (total > 0) {
-                        "Copying $fileName: $percent% (${ObbManager.formatFileSize(copied)} / ${ObbManager.formatFileSize(total)})"
+                        "Copying: ${ObbManager.formatFileSize(copied)} / ${ObbManager.formatFileSize(total)}"
                     } else {
-                        "Copying $fileName: ${ObbManager.formatFileSize(copied)}..."
+                        "Copying: ${ObbManager.formatFileSize(copied)}..."
                     }
-                    loading.message(text = progressMsg)
+                    tvProgressStatus.text = progressMsg
                 }
             }
 
             activity?.runOnUiThread {
-                loading.dismiss()
+                dialog.dismiss()
                 if (success) {
                     toast("OBB installed successfully!")
                     updateUI()
@@ -394,57 +547,66 @@ class HomeFragment : Fragment() {
         }.start()
     }
 
-    private fun copyObbFileAndLaunch(sourceFile: File) {
-        val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
-        val targetFile = File(targetDir, sourceFile.name)
-
-        val loading = MaterialDialog(requireContext()).apply {
-            title(text = "Installing OBB Data")
-            message(text = "Copying ${sourceFile.name}... Please wait.")
-            cancelable(false)
-            show()
-        }
-
-        Thread {
-            val success = ObbManager.copyFileWithProgress(sourceFile, targetFile) { percent, copied, total ->
-                activity?.runOnUiThread {
-                    loading.message(text = "Copying ${sourceFile.name}: $percent% (${ObbManager.formatFileSize(copied)} / ${ObbManager.formatFileSize(total)})")
-                }
-            }
-
-            activity?.runOnUiThread {
-                loading.dismiss()
-                if (success) {
-                    toast("OBB installed successfully!")
-                    updateUI()
-                    performDirectLaunch()
-                } else {
-                    toast("Failed to copy OBB file.")
-                }
-            }
-        }.start()
-    }
-
     private fun showManageObbDialog() {
+        val context = context ?: return
         val installedFiles = ObbManager.getInstalledObbFiles(bgmiPackageName, currentUserId)
-        val statusMsg = if (installedFiles.isNotEmpty()) {
-            val details = installedFiles.joinToString("\n") { "• ${it.name} (${ObbManager.formatFileSize(it.length())})" }
-            "OBB Status: Installed\n\nActive files in virtual space:\n$details"
-        } else {
-            "OBB Status: Missing (Game will hang on 0MB / 0MB download screen)\n\nNo OBB files found in virtual storage."
+        val hasFiles = installedFiles.isNotEmpty()
+
+        val dialog = Dialog(context)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
+        dialog.setContentView(dialogView)
+
+        dialog.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
 
-        MaterialDialog(requireContext()).show {
-            title(text = "Manage OBB Game Data")
-            message(text = statusMsg)
-            positiveButton(text = "Select OBB File") {
-                openObbPicker()
-            }
-            neutralButton(text = "Auto-Scan Storage") {
-                scanAndNotifyObb()
-            }
-            negativeButton(res = R.string.cancel)
+        val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
+        val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
+        val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
+        val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
+        val tvQuestionMessage = dialogView.findViewById<TextView>(R.id.tvQuestionMessage)
+        val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
+        val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
+        val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
+        val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
+        val tvSecondaryText = dialogView.findViewById<TextView>(R.id.tvSecondaryText)
+
+        tvDialogTitle.text = "Game Data (OBB)"
+        tvDialogSubtitle.text = if (hasFiles) "Installed" else "Missing"
+        tvFileCardLabel.text = "VIRTUAL STORAGE:"
+        if (hasFiles) {
+            val f = installedFiles.first()
+            tvFileName.text = f.name
+            tvFileSize.text = "(${ObbManager.formatFileSize(f.length())})"
+            tvQuestionMessage.text = "OBB is currently active in Inverness virtual space."
+        } else {
+            tvFileName.text = "No OBB installed"
+            tvFileSize.text = "(Game cannot launch without OBB)"
+            tvQuestionMessage.text = "Please select OBB file or tap Auto-Scan."
         }
+
+        tvPrimaryBtnText.text = "SELECT OBB FILE"
+        tvSecondaryText.text = "AUTO-SCAN"
+
+        btnPrimaryAction.setOnClickListener {
+            dialog.dismiss()
+            openObbPicker()
+        }
+
+        btnDialogCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnDialogSecondary.setOnClickListener {
+            dialog.dismiss()
+            scanAndNotifyObb()
+        }
+
+        dialog.show()
     }
 
     private fun scanAndNotifyObb() {
@@ -452,14 +614,48 @@ class HomeFragment : Fragment() {
         if (found.isNotEmpty()) {
             promptAutoCopyObbAndLaunch(found.first())
         } else {
-            MaterialDialog(requireContext()).show {
-                title(text = "No OBB Files Found")
-                message(text = "Could not find any OBB file for $bgmiPackageName in Downloads or storage.\n\nPlease copy your OBB file into your 'Download' folder or tap 'Select OBB File' to browse manually.")
-                positiveButton(text = "Select OBB File") {
-                    openObbPicker()
-                }
-                negativeButton(res = R.string.cancel)
+            val context = context ?: return
+            val dialog = Dialog(context)
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
+            dialog.setContentView(dialogView)
+
+            dialog.window?.let { window ->
+                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+                window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
+
+            val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+            val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
+            val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
+            val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
+            val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
+            val tvQuestionMessage = dialogView.findViewById<TextView>(R.id.tvQuestionMessage)
+            val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
+            val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
+            val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
+            val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
+
+            tvDialogTitle.text = "Game Data (OBB)"
+            tvDialogSubtitle.text = "Not Found"
+            tvFileCardLabel.text = "SCAN RESULT:"
+            tvFileName.text = "No OBB files discovered"
+            tvFileSize.text = "(Searched storage & Downloads)"
+            tvQuestionMessage.text = "Please copy the OBB file into your 'Download' folder or select it manually."
+            tvPrimaryBtnText.text = "SELECT OBB FILE"
+            btnDialogSecondary.visibility = View.GONE
+
+            btnPrimaryAction.setOnClickListener {
+                dialog.dismiss()
+                openObbPicker()
+            }
+
+            btnDialogCancel.setOnClickListener {
+                dialog.dismiss()
+            }
+
+            dialog.show()
         }
     }
 
@@ -483,67 +679,87 @@ class HomeFragment : Fragment() {
     }
 
     private fun showGameMenu(anchor: View) {
-        val popup = PopupMenu(requireContext(), anchor)
+        val context = context ?: return
         val isInstalled = try {
             BlackBoxCore.get().isInstalled(bgmiPackageName, currentUserId)
         } catch (t: Throwable) {
             false
         }
 
-        if (isInstalled) {
-            popup.menu.add(0, 1, 0, "Launch Game")
-            popup.menu.add(0, 6, 1, "Manage OBB Data")
-            popup.menu.add(0, 2, 2, "Create Shortcut")
-            popup.menu.add(0, 3, 3, "Clear Data")
-            popup.menu.add(0, 4, 4, "Uninstall")
-        } else {
-            popup.menu.add(0, 5, 0, "Install from Device")
+        if (!isInstalled) {
+            checkAndPromptGameInstall()
+            return
         }
 
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> launchBgmi()
-                6 -> showManageObbDialog()
-                2 -> createBgmiShortcut()
-                3 -> {
-                    MaterialDialog(requireContext()).show {
-                        title(text = "Clear Data")
-                        message(text = "Clear all data and caches for BGMI?")
-                        positiveButton(R.string.done) {
-                            try {
-                                BlackBoxCore.get().clearPackage(bgmiPackageName, currentUserId)
-                                toast("Data cleared")
-                            } catch (t: Throwable) {
-                                toast("Failed to clear data")
-                            }
-                        }
-                        negativeButton(R.string.cancel)
-                    }
-                }
-                4 -> {
-                    MaterialDialog(requireContext()).show {
-                        title(text = "Uninstall Game")
-                        message(text = "Uninstall BGMI from virtual space?")
-                        positiveButton(R.string.done) {
-                            try {
-                                BlackBoxCore.get().uninstallPackageAsUser(bgmiPackageName, currentUserId)
-                                toast("Uninstalled")
-                                updateUI()
-                                (activity as? MainActivity)?.refreshHomeAndApps()
-                            } catch (t: Throwable) {
-                                toast("Failed to uninstall")
-                            }
-                        }
-                        negativeButton(R.string.cancel)
-                    }
-                }
-                5 -> {
-                    checkAndPromptGameInstall()
-                }
-            }
+        val popupView = layoutInflater.inflate(R.layout.popup_game_menu, null)
+        val popupWindow = PopupWindow(
+            popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
             true
+        )
+        popupWindow.isOutsideTouchable = true
+        popupWindow.isFocusable = true
+        popupWindow.elevation = 20f
+        popupWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        popupView.findViewById<View>(R.id.menuItemLaunch).setOnClickListener {
+            popupWindow.dismiss()
+            launchBgmi()
         }
-        popup.show()
+
+        popupView.findViewById<View>(R.id.menuItemManageObb).setOnClickListener {
+            popupWindow.dismiss()
+            showManageObbDialog()
+        }
+
+        popupView.findViewById<View>(R.id.menuItemShortcut).setOnClickListener {
+            popupWindow.dismiss()
+            createBgmiShortcut()
+        }
+
+        popupView.findViewById<View>(R.id.menuItemClearData).setOnClickListener {
+            popupWindow.dismiss()
+            MaterialDialog(requireContext()).show {
+                title(text = "Clear Data")
+                message(text = "Clear all data and caches for BGMI?")
+                positiveButton(R.string.done) {
+                    try {
+                        BlackBoxCore.get().clearPackage(bgmiPackageName, currentUserId)
+                        toast("Data cleared")
+                    } catch (t: Throwable) {
+                        toast("Failed to clear data")
+                    }
+                }
+                negativeButton(R.string.cancel)
+            }
+        }
+
+        popupView.findViewById<View>(R.id.menuItemUninstall).setOnClickListener {
+            popupWindow.dismiss()
+            MaterialDialog(requireContext()).show {
+                title(text = "Uninstall Game")
+                message(text = "Uninstall BGMI from virtual space?")
+                positiveButton(R.string.done) {
+                    try {
+                        BlackBoxCore.get().uninstallPackageAsUser(bgmiPackageName, currentUserId)
+                        toast("Uninstalled")
+                        updateUI()
+                        (activity as? MainActivity)?.refreshHomeAndApps()
+                    } catch (t: Throwable) {
+                        toast("Failed to uninstall")
+                    }
+                }
+                negativeButton(R.string.cancel)
+            }
+        }
+
+        popupView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val xOffset = anchor.width - popupView.measuredWidth
+        popupWindow.showAsDropDown(anchor, xOffset, 12)
     }
 
     private fun showUserSelectorDialog() {

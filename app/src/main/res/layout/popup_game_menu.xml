@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="215dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_popup_game_menu"
+    android:elevation="12dp"
+    android:orientation="vertical"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <!-- Item: Launch Game -->
+    <LinearLayout
+        android:id="@+id/menuItemLaunch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_menu_item_ripple"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_menu_play"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="Launch Game"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Item: Manage OBB Data -->
+    <LinearLayout
+        android:id="@+id/menuItemManageObb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@drawable/bg_menu_item_ripple"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_menu_folder"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="Manage OBB Data"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Item: Create Shortcut -->
+    <LinearLayout
+        android:id="@+id/menuItemShortcut"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@drawable/bg_menu_item_ripple"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_menu_shortcut"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="Create Shortcut"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Item: Clear Data -->
+    <LinearLayout
+        android:id="@+id/menuItemClearData"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@drawable/bg_menu_item_ripple"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_menu_broom"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="Clear Data"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Item: Uninstall -->
+    <LinearLayout
+        android:id="@+id/menuItemUninstall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:background="@drawable/bg_menu_item_ripple"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@drawable/ic_menu_trash"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="Uninstall"
+            android:textColor="#F1F5F9"
+            android:textSize="14.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>
