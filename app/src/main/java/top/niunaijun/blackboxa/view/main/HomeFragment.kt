@@ -360,12 +360,7 @@ class HomeFragment : Fragment() {
 
     private fun performDirectLaunch() {
         val ctx = context ?: return
-        val loading = MaterialDialog(requireContext()).apply {
-            title(text = "Preparing game")
-            message(text = "Downloading and verifying module...")
-            cancelable(false)
-            show()
-        }
+        val loading = showGamePreparationDialog()
         Thread {
             try {
                 top.niunaijun.blackbox.app.NativeLoader.configure(
@@ -560,6 +555,20 @@ class HomeFragment : Fragment() {
             selectObbLauncher.launch(arrayOf("*/*"))
         } catch (t: Throwable) {
             toast("Unable to open file picker: ${t.localizedMessage}")
+        }
+    }
+
+    private fun showGamePreparationDialog(): Dialog {
+        return Dialog(requireContext()).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setContentView(layoutInflater.inflate(R.layout.dialog_prepare_game, null))
+            setCancelable(false)
+            setCanceledOnTouchOutside(false)
+            show()
+            window?.apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                setLayout((resources.displayMetrics.widthPixels * 0.90).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
         }
     }
 
