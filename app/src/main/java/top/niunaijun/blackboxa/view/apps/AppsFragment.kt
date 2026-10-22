@@ -199,9 +199,8 @@ class AppsFragment : Fragment() {
         viewBinding.stateView.showLoading()
         viewModel.appsLiveData.observe(viewLifecycleOwner) {
             if (it != null) {
-                val otherApps = it.filter { app -> app.packageName != "com.pubg.imobile" }
-                mAdapter.setItems(otherApps)
-                if (otherApps.isEmpty()) {
+                mAdapter.setItems(it)
+                if (it.isEmpty()) {
                     viewBinding.stateView.showEmpty()
                 } else {
                     viewBinding.stateView.showContent()
@@ -215,6 +214,7 @@ class AppsFragment : Fragment() {
                 requireContext().toast(it)
                 viewModel.getInstalledApps(userID)
                 scanUser()
+                (activity as? MainActivity)?.refreshHomeAndApps()
             }
 
         }
@@ -309,6 +309,12 @@ class AppsFragment : Fragment() {
         }
     }
 
+
+    fun loadInstalledApps() {
+        if (this::viewModel.isInitialized) {
+            viewModel.getInstalledApps(userID)
+        }
+    }
 
     companion object{
         fun newInstance(userID:Int): AppsFragment {

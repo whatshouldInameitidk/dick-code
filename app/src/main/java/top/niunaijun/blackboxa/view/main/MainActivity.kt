@@ -132,6 +132,8 @@ class MainActivity : LoadingActivity() {
 
         if (tabIndex == 0) {
             homeFragment.updateUI()
+        } else if (tabIndex == 1) {
+            appsFragment.loadInstalledApps()
         } else if (tabIndex == 2) {
             usersFragment.loadUsers()
         }
@@ -183,6 +185,13 @@ class MainActivity : LoadingActivity() {
     fun updateHeader() {
         homeFragment.updateUI()
         usersFragment.loadUsers()
+    }
+
+    fun refreshHomeAndApps() {
+        runOnUiThread {
+            homeFragment.updateUI()
+            appsFragment.loadInstalledApps()
+        }
     }
 
     fun showFloatButton(show: Boolean) {

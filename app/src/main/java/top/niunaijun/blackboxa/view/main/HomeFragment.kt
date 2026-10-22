@@ -4,12 +4,14 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import com.afollestad.materialdialogs.MaterialDialog
@@ -22,7 +24,6 @@ import top.niunaijun.blackboxa.databinding.FragmentHomeBinding
 import top.niunaijun.blackboxa.util.ShortcutUtil
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
-import top.niunaijun.blackboxa.view.list.ListActivity
 
 class HomeFragment : Fragment() {
 
@@ -37,6 +38,10 @@ class HomeFragment : Fragment() {
             }
         }
 
+    private val selectApkLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { installApkUri(it) }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -48,7 +53,11 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initListeners()
-        val ver = try { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "1.0.0" } catch (e: Exception) { "1.0.0" }
+        val ver = try {
+            requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
         viewBinding.tvAppTitle.text = "InvernessLoader"
         viewBinding.tvAppVersion.text = "v$ver"
         viewBinding.tvAppVersion.setOnClickListener {
@@ -69,7 +78,7 @@ class HomeFragment : Fragment() {
 
         viewBinding.btnSearch.setOnClickListener {
             val mainActivity = activity as? MainActivity
-            mainActivity?.switchToTab(1) // Switch to Apps tab for search/all apps
+            mainActivity?.switchToTab(1) // Switch to Apps tab
         }
 
         viewBinding.btnLaunchGame.setOnClickListener {
@@ -81,9 +90,7 @@ class HomeFragment : Fragment() {
         }
 
         viewBinding.btnInstallGame.setOnClickListener {
-            val intent = Intent(requireContext(), ListActivity::class.java)
-            intent.putExtra("userID", currentUserId)
-            requireActivity().startActivity(intent)
+            checkAndPromptGameInstall()
         }
 
         viewBinding.btnGameMenu.setOnClickListener { v ->
@@ -92,6 +99,8 @@ class HomeFragment : Fragment() {
     }
 
     fun updateUI() {
+        if (!isAdded) return
+
         val remark = AppManager.mRemarkSharedPreferences.getString("Remark$currentUserId", "User $currentUserId")
         viewBinding.tvUserName.text = if (remark.isNullOrEmpty()) "User $currentUserId" else remark
 
@@ -132,7 +141,7 @@ class HomeFragment : Fragment() {
             }
 
             viewBinding.tvGameTitle.text = appLabel
-            val statusText = if (versionName.isNotEmpty()) "Installed · $versionName" else "Installed"
+            val statusText = if (versionName.isNotEmpty()) "Installed • $versionName" else "Installed"
             viewBinding.tvGameStatus.text = statusText
             viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
             viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
@@ -155,6 +164,113 @@ class HomeFragment : Fragment() {
             viewBinding.layoutInstalledActions.visibility = View.GONE
             viewBinding.layoutNotInstalledActions.visibility = View.VISIBLE
         }
+    }
+
+    private fun checkAndPromptGameInstall() {
+        val pm = requireContext().packageManager
+        val isHostInstalled = try {
+            pm.getPackageInfo(bgmiPackageName, 0) != null
+        } catch (e: Exception) {
+            false
+        }
+
+        if (isHostInstalled) {
+            var appLabel = "BATTLEGROUNDS MOBILE INDIA"
+            try {
+                val appInfo = pm.getApplicationInfo(bgmiPackageName, 0)
+                appLabel = appInfo.loadLabel(pm).toString()
+            } catch (t: Throwable) {}
+
+            MaterialDialog(requireContext()).show {
+                title(text = "Install $appLabel")
+                message(text = "$appLabel is installed on your device. Would you like to install it into Inverness virtual space now?")
+                positiveButton(text = "Install Now") {
+                    installHostGame()
+                }
+                negativeButton(res = R.string.cancel)
+            }
+        } else {
+            MaterialDialog(requireContext()).show {
+                title(text = "Game Not Found")
+                message(text = "BATTLEGROUNDS MOBILE INDIA is not installed on this device. You can choose an APK file from storage or install it from Play Store.")
+                positiveButton(text = "Choose APK") {
+                    openApkPicker()
+                }
+                negativeButton(res = R.string.cancel)
+            }
+        }
+    }
+
+    private fun installHostGame() {
+        val loading = MaterialDialog(requireContext()).apply {
+            title(text = "Installing")
+            message(text = "Installing BATTLEGROUNDS MOBILE INDIA into virtual space... Please wait.")
+            cancelable(false)
+            show()
+        }
+
+        Thread {
+            try {
+                val blackBoxCore = BlackBoxCore.get()
+                val installResult = blackBoxCore.installPackageAsUser(bgmiPackageName, currentUserId)
+
+                activity?.runOnUiThread {
+                    loading.dismiss()
+                    if (installResult.success) {
+                        toast("BGMI installed successfully!")
+                        updateUI()
+                        (activity as? MainActivity)?.refreshHomeAndApps()
+                    } else {
+                        toast("Install failed: ${installResult.msg}")
+                    }
+                }
+            } catch (t: Throwable) {
+                activity?.runOnUiThread {
+                    loading.dismiss()
+                    toast("Install error: ${t.localizedMessage}")
+                }
+            }
+        }.start()
+    }
+
+    private fun openApkPicker() {
+        try {
+            selectApkLauncher.launch("application/vnd.android.package-archive")
+        } catch (t: Throwable) {
+            toast("Unable to open file picker: ${t.localizedMessage}")
+        }
+    }
+
+    private fun installApkUri(uri: Uri) {
+        val loading = MaterialDialog(requireContext()).apply {
+            title(text = "Installing")
+            message(text = "Installing APK into virtual space... Please wait.")
+            cancelable(false)
+            show()
+        }
+
+        Thread {
+            try {
+                val blackBoxCore = BlackBoxCore.get()
+                val installResult = blackBoxCore.installPackageAsUser(uri, currentUserId)
+
+                activity?.runOnUiThread {
+                    loading.dismiss()
+                    if (installResult.success) {
+                        toast("App installed successfully!")
+                        updateUI()
+                        (activity as? MainActivity)?.refreshHomeAndApps()
+                    } else {
+                        toast("Install failed: ${installResult.msg}")
+                    }
+                }
+            } catch (t: Throwable) {
+                activity?.runOnUiThread {
+                    loading.dismiss()
+                    toast("Install error: ${t.localizedMessage}")
+                }
+            }
+        }.start()
     }
 
     private fun launchBgmi() {
@@ -230,6 +346,7 @@ class HomeFragment : Fragment() {
                                 BlackBoxCore.get().uninstallPackageAsUser(bgmiPackageName, currentUserId)
                                 toast("Uninstalled")
                                 updateUI()
+                                (activity as? MainActivity)?.refreshHomeAndApps()
                             } catch (t: Throwable) {
                                 toast("Failed to uninstall")
                             }
@@ -238,9 +355,7 @@ class HomeFragment : Fragment() {
                     }
                 }
                 5 -> {
-                    val intent = Intent(requireContext(), ListActivity::class.java)
-                    intent.putExtra("userID", currentUserId)
-                    requireActivity().startActivity(intent)
+                    checkAndPromptGameInstall()
                 }
             }
             true
