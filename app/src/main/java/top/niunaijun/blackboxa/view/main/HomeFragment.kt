@@ -59,6 +59,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initClicks()
+        viewBinding.tvAppVersion.text = "v" + top.niunaijun.blackboxa.BuildConfig.VERSION_NAME
         updateUI()
     }
 
