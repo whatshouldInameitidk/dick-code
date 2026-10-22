@@ -17,6 +17,7 @@ import javax.crypto.spec.GCMParameterSpec
 object SecureSessionStore {
     private const val PREFS = "secure_auth"
     private const val LICENSE_KEY = "license_key"
+    private const val LICENSE_EXPIRY = "license_expiry"
     private const val DEVICE_ID = "device_id"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "inverness_auth_key_v1"
@@ -28,8 +29,24 @@ object SecureSessionStore {
         write(context, LICENSE_KEY, licenseKey)
     }
 
+    fun saveLicenseExpiry(context: Context, expiryEpochSeconds: Long?) {
+        if (expiryEpochSeconds == null) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(LICENSE_EXPIRY).apply()
+        } else {
+            write(context, LICENSE_EXPIRY, expiryEpochSeconds.toString())
+        }
+    }
+
+    fun licenseExpiryMillis(context: Context): Long? = read(context, LICENSE_EXPIRY)
+        ?.toLongOrNull()
+        ?.takeIf { it > 0L }
+        ?.times(1_000L)
+
     fun clearLicenseKey(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(LICENSE_KEY).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(LICENSE_KEY)
+            .remove(LICENSE_EXPIRY)
+            .apply()
     }
 
     fun deviceId(context: Context): String {

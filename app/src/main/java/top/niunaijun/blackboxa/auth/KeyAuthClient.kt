@@ -20,7 +20,7 @@ object KeyAuthClient {
     private const val KEYAUTH_PUBLIC_KEY_PIN = "Uph03/nw3T0tdWja1iU6bxYUBryw4jzeFdyeSuVRMEs="
 
     sealed class Result {
-        object Authorized : Result()
+        data class Authorized(val expiryEpochSeconds: Long?) : Result()
         data class Rejected(val message: String) : Result()
     }
 
@@ -49,7 +49,15 @@ object KeyAuthClient {
                     "ownerid" to OWNER_ID
                 )
             )
-            if (license.optBoolean("success")) Result.Authorized
+            if (license.optBoolean("success")) {
+                val expiry = license.optJSONObject("info")
+                    ?.optJSONArray("subscriptions")
+                    ?.optJSONObject(0)
+                    ?.optString("expiry")
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0L }
+                Result.Authorized(expiry)
+            }
             else Result.Rejected(license.optString("message", "License was rejected"))
         } catch (error: Exception) {
             Result.Rejected(error.message ?: "Could not contact KeyAuth")

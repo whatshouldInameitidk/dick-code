@@ -1,83 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginBottom="12dp"
-    android:background="@drawable/bg_card_dark"
-    android:orientation="horizontal"
-    android:padding="16dp">
-
-    <!-- Avatar -->
-    <ImageView
-        android:id="@+id/iv_user_avatar"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="center_vertical"
-        android:background="@drawable/bg_pill_user"
-        android:contentDescription="Avatar"
-        android:padding="10dp"
-        android:src="@drawable/ic_android_robot"
-        app:tint="#8EA2B9" />
-
-    <!-- Info Column -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
-        android:layout_marginStart="14dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/tv_user_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="User 0"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tv_user_subtitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="User ID: 0 · Active"
-            android:textColor="#00E676"
-            android:textSize="12sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="116dp" android:layout_marginBottom="14dp" android:background="@drawable/bg_user_card_inactive" android:clickable="true" android:focusable="true" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="18dp" android:paddingEnd="14dp">
+    <ImageView android:id="@+id/iv_user_avatar" android:layout_width="76dp" android:layout_height="76dp" android:background="@drawable/bg_pill_user" android:contentDescription="Virtual user" android:padding="19dp" android:src="@drawable/ic_nav_users" app:tint="#8AB3FF" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/tv_user_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#F7F9FF" android:textSize="20sp" android:textStyle="bold" />
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
+            <View android:id="@+id/v_user_status" android:layout_width="10dp" android:layout_height="10dp" android:background="@drawable/bg_user_status_dot" />
+            <TextView android:id="@+id/tv_user_subtitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:textColor="#91A8D3" android:textSize="15sp" />
+        </LinearLayout>
     </LinearLayout>
-
-    <!-- Action Buttons -->
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <!-- Rename Button -->
-        <ImageView
-            android:id="@+id/btn_rename_user"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?selectableItemBackgroundBorderless"
-            android:contentDescription="Rename"
-            android:padding="8dp"
-            android:src="@drawable/ic_report"
-            app:tint="#8EA2B9" />
-
-        <!-- Delete Button -->
-        <ImageView
-            android:id="@+id/btn_delete_user"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginStart="4dp"
-            android:background="?selectableItemBackgroundBorderless"
-            android:contentDescription="Delete"
-            android:padding="8dp"
-            android:src="@drawable/ic_empty"
-            android:visibility="gone"
-            app:tint="#FF5252" />
-    </LinearLayout>
-
+    <ImageView android:id="@+id/btn_switch_user" android:layout_width="52dp" android:layout_height="52dp" android:background="@drawable/bg_user_action" android:contentDescription="Switch user" android:padding="14dp" android:src="@drawable/ic_play_arrow" app:tint="#93B8FF" />
+    <ImageView android:id="@+id/btn_rename_user" android:layout_width="52dp" android:layout_height="52dp" android:layout_marginStart="8dp" android:background="@drawable/bg_user_action" android:contentDescription="User options" android:padding="14dp" android:src="@drawable/ic_nav_setting" app:tint="#93B8FF" />
+    <ImageView android:id="@+id/btn_delete_user" android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
 </LinearLayout>

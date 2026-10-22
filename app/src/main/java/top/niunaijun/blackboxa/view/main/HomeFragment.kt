@@ -212,19 +212,13 @@ class HomeFragment : Fragment() {
 
         if (isHostInstalled) {
             var appLabel = "BATTLEGROUNDS MOBILE INDIA"
+            var appIcon: Drawable? = null
             try {
                 val appInfo = pm.getApplicationInfo(bgmiPackageName, 0)
                 appLabel = appInfo.loadLabel(pm).toString()
+                appIcon = appInfo.loadIcon(pm)
             } catch (t: Throwable) {}
-
-            MaterialDialog(requireContext()).show {
-                title(text = "Install $appLabel")
-                message(text = "$appLabel is installed on your device. Would you like to install it into Inverness virtual space now?")
-                positiveButton(text = "Install Now") {
-                    installHostGame()
-                }
-                negativeButton(res = R.string.cancel)
-            }
+            showHostGameInstallDialog(appLabel, appIcon)
         } else {
             MaterialDialog(requireContext()).show {
                 title(text = "Game Not Found")
@@ -234,6 +228,29 @@ class HomeFragment : Fragment() {
                 }
                 negativeButton(res = R.string.cancel)
             }
+        }
+    }
+
+    private fun showHostGameInstallDialog(appLabel: String, appIcon: Drawable?) {
+        val dialog = Dialog(requireContext())
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_install_game, null)
+        dialog.setContentView(dialogView)
+        dialogView.findViewById<ImageView>(R.id.iv_install_game_icon).apply {
+            if (appIcon != null) setImageDrawable(appIcon) else setImageResource(R.mipmap.ic_launcher)
+        }
+        dialogView.findViewById<TextView>(R.id.tv_install_game_title).text = "Install $appLabel"
+        dialogView.findViewById<TextView>(R.id.tv_install_game_message).text =
+            "$appLabel is installed on your device.\nWould you like to install it into Inverness virtual space now?"
+        dialogView.findViewById<View>(R.id.btn_install_cancel).setOnClickListener { dialog.dismiss() }
+        dialogView.findViewById<View>(R.id.btn_install_confirm).setOnClickListener {
+            dialog.dismiss()
+            installHostGame()
+        }
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout((resources.displayMetrics.widthPixels * 0.90).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
 

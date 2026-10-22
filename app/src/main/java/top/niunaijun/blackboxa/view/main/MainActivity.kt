@@ -172,7 +172,7 @@ class MainActivity : LoadingActivity() {
     }
 
     fun switchToTab(tabIndex: Int) {
-        currentTabIndex = tabIndex
+        val movingForward = tabIndex > currentTabIndex
         val targetFragment: Fragment = when (tabIndex) {
             0 -> homeFragment
             1 -> appsFragment
@@ -183,12 +183,18 @@ class MainActivity : LoadingActivity() {
 
         if (activeFragment != targetFragment) {
             val transaction = supportFragmentManager.beginTransaction()
+            transaction.setCustomAnimations(
+                if (movingForward) R.anim.tab_enter_from_right else R.anim.tab_enter_from_left,
+                if (movingForward) R.anim.tab_exit_to_left else R.anim.tab_exit_to_right
+            )
             if (activeFragment != null) {
                 transaction.hide(activeFragment!!)
             }
             transaction.show(targetFragment).commit()
             activeFragment = targetFragment
         }
+
+        currentTabIndex = tabIndex
 
         updateTabStyles(tabIndex)
 
@@ -231,6 +237,11 @@ class MainActivity : LoadingActivity() {
                 textView.setTextColor(inactiveColor)
                 textView.typeface = Typeface.DEFAULT
             }
+            tabLayout.animate()
+                .scaleX(if (index == selectedIndex) 1.04f else 1f)
+                .scaleY(if (index == selectedIndex) 1.04f else 1f)
+                .setDuration(TAB_SELECTION_ANIMATION_MS)
+                .start()
         }
     }
 
@@ -295,6 +306,8 @@ class MainActivity : LoadingActivity() {
         }
 
     companion object {
+        private const val TAB_SELECTION_ANIMATION_MS = 160L
+
         fun start(context: Context) {
             val intent = Intent(context, MainActivity::class.java)
             context.startActivity(intent)

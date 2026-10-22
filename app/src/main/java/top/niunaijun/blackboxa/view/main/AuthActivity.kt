@@ -49,8 +49,9 @@ class AuthActivity : AppCompatActivity() {
         setLoading(true, getString(R.string.auth_verifying))
         lifecycleScope.launch {
             when (val result = KeyAuthClient.authorize(licenseKey, SecureSessionStore.deviceId(this@AuthActivity))) {
-                KeyAuthClient.Result.Authorized -> {
+                is KeyAuthClient.Result.Authorized -> {
                     SecureSessionStore.saveLicenseKey(this@AuthActivity, licenseKey)
+                    SecureSessionStore.saveLicenseExpiry(this@AuthActivity, result.expiryEpochSeconds)
                     AuthSession.authorize()
                     openMain()
                 }
