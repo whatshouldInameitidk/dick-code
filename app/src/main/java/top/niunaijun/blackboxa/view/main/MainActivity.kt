@@ -16,6 +16,7 @@ import top.niunaijun.blackbox.BlackBoxCore
 import top.niunaijun.blackbox.core.system.user.BUserInfo
 import top.niunaijun.blackboxa.R
 import top.niunaijun.blackboxa.app.AppManager
+import top.niunaijun.blackboxa.auth.AuthSession
 import top.niunaijun.blackboxa.databinding.ActivityMainBinding
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.view.apps.AppsFragment
@@ -39,6 +40,11 @@ class MainActivity : LoadingActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!AuthSession.isAuthorized) {
+            AuthActivity.start(this)
+            finish()
+            return
+        }
         setContentView(viewBinding.root)
 
         initFragments(savedInstanceState)

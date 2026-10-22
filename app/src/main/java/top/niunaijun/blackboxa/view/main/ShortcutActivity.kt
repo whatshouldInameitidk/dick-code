@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import top.niunaijun.blackbox.BlackBoxCore
+import top.niunaijun.blackboxa.auth.AuthSession
 
 /**
  *
@@ -16,6 +17,11 @@ class ShortcutActivity:AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!AuthSession.isAuthorized) {
+            AuthActivity.start(this)
+            finish()
+            return
+        }
 
         val pkg = intent.getStringExtra("pkg")
         val userID = intent.getIntExtra("userId",0)

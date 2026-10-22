@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">keyauth.win</domain>
+        <pin-set expiration="2027-10-22">
+            <pin digest="SHA-256">Uph03/nw3T0tdWja1iU6bxYUBryw4jzeFdyeSuVRMEs=</pin>
+        </pin-set>
+    </domain-config>
 </network-security-config>

@@ -26,7 +26,7 @@
     </style>
 
     <style name="WelcomeTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:windowBackground">@color/dark_bg</item>
     </style>
 
 </resources>

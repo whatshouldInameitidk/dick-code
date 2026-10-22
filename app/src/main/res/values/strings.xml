@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="welcome_brand">InvernessMobile</string>
+    <string name="auth_subtitle">Please enter your key to proceed.</string>
+    <string name="auth_license_key">License key</string>
+    <string name="auth_unlock">Login</string>
+    <string name="auth_key_required">Enter your license key</string>
+    <string name="auth_verifying">Verifying secure access…</string>
     <string name="choose">Choose</string>
     <string name="choose_app">Choose App</string>
     <string name="installed_app">Installed App</string>
