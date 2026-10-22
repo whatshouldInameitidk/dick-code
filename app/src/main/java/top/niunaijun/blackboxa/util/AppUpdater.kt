@@ -111,10 +111,39 @@ object AppUpdater {
     }
 
     private fun fetchRemoteVersion(): String? {
+        // 1. Try real-time GitHub API (instant, never delayed by CDN cache)
+        try {
+            val apiUrl = URL("https://api.github.com/repos/whatshouldInameitidk/InvernessLoader/contents/remote_version.txt")
+            val conn = apiUrl.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 6000
+            conn.readTimeout = 6000
+            conn.setRequestProperty("User-Agent", "InvernessLoader")
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val json = org.json.JSONObject(jsonStr)
+                if (json.has("content")) {
+                    val encoded = json.getString("content").replace("\n", "").replace("\r", "").trim()
+                    val decoded = String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
+                    if (decoded.isNotEmpty()) {
+                        Log.d(TAG, "Fetched remote version via GitHub API: $decoded")
+                        return decoded
+                    }
+                }
+            } else {
+                conn.disconnect()
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "GitHub API fetch failed, falling back to raw: ${t.message}")
+        }
+
+        // 2. Fallback to raw GitHub content
         var connection: HttpURLConnection? = null
         return try {
-            val cacheBusterUrl = "$REMOTE_VERSION_URL?t=${System.currentTimeMillis()}"
-            val url = URL(cacheBusterUrl)
+            val url = URL(REMOTE_VERSION_URL)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 8000
