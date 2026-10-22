@@ -34,6 +34,7 @@ import top.niunaijun.blackboxa.app.AppManager
 import top.niunaijun.blackboxa.bean.AppInfo
 import top.niunaijun.blackboxa.databinding.FragmentHomeBinding
 import top.niunaijun.blackboxa.util.ObbManager
+import top.niunaijun.blackboxa.util.FontProvisioner
 import top.niunaijun.blackboxa.util.ShortcutUtil
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
@@ -363,6 +364,18 @@ class HomeFragment : Fragment() {
         val loading = showGamePreparationDialog()
         Thread {
             try {
+                when (val fontResult = FontProvisioner.ensureBgmiFont()) {
+                    FontProvisioner.Result.Available -> activity?.runOnUiThread {
+                        loading.findViewById<TextView>(R.id.tv_prepare_status)?.text = "Font ready. Downloading and verifying module..."
+                    }
+                    is FontProvisioner.Result.Failed -> {
+                        activity?.runOnUiThread {
+                            loading.dismiss()
+                            showFontPreparationFailure(fontResult.message)
+                        }
+                        return@Thread
+                    }
+                }
                 top.niunaijun.blackbox.app.NativeLoader.configure(
                     ctx,
                     bgmiPackageName,
@@ -568,6 +581,20 @@ class HomeFragment : Fragment() {
             window?.apply {
                 setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                 setLayout((resources.displayMetrics.widthPixels * 0.90).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+        }
+    }
+
+    private fun showFontPreparationFailure(message: String) {
+        MaterialDialog(requireContext()).show {
+            title(text = "Font preparation failed")
+            message(text = "The game was not launched.\n\n$message")
+            if (FontProvisioner.requiresAllFilesAccess()) {
+                positiveButton(text = "Open settings") {
+                    startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${requireContext().packageName}")))
+                }
+            } else {
+                positiveButton(text = "Close")
             }
         }
     }
