@@ -48,6 +48,12 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initListeners()
+        val ver = try { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "1.0.0" } catch (e: Exception) { "1.0.0" }
+        viewBinding.tvAppTitle.text = "InvernessLoader"
+        viewBinding.tvAppVersion.text = "v$ver"
+        viewBinding.tvAppVersion.setOnClickListener {
+            activity?.let { act -> top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(act, manual = true) }
+        }
         updateUI()
     }
 

@@ -53,4 +53,12 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="Updates">
+        <Preference
+                android:key="check_update"
+                app:icon="@drawable/ic_system_update"
+                android:title="Check for Updates"
+                android:summary="Check GitHub for latest InvernessLoader build"/>
+    </PreferenceCategory>
+
 </PreferenceScreen>

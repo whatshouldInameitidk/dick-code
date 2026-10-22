@@ -28,6 +28,11 @@ class SettingFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.setting, rootKey)
 
+        findPreference<Preference>("check_update")?.setOnPreferenceClickListener {
+            activity?.let { act -> top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(act, manual = true) }
+            true
+        }
+
         findPreference<Preference>("crash_report")?.setOnPreferenceClickListener {
             val intent = Intent(requireActivity(), CrashReportActivity::class.java)
             requireContext().startActivity(intent)

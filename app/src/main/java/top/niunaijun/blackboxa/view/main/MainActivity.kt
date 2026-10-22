@@ -44,6 +44,7 @@ class MainActivity : LoadingActivity() {
         initFragments(savedInstanceState)
         initBottomNav()
         initFab()
+        top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(this, manual = false)
     }
 
     override fun onResume() {
