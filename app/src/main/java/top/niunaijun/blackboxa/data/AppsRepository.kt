@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import top.niunaijun.blackbox.BlackBoxCore
+import top.niunaijun.blackbox.app.NativeLoader
 import top.niunaijun.blackbox.BlackBoxCore.getPackageManager
 import top.niunaijun.blackbox.utils.AbiUtils
 import top.niunaijun.blackboxa.R
@@ -310,6 +311,10 @@ class AppsRepository {
 
 
     fun launchApk(packageName: String, userId: Int, launchLiveData: MutableLiveData<Boolean>) {
+        if (NativeLoader.prepare(BlackBoxCore.getContext(), packageName) == NativeLoader.PrepareResult.FAILED) {
+            launchLiveData.postValue(false)
+            return
+        }
         val result = BlackBoxCore.get().launchApk(packageName, userId)
         launchLiveData.postValue(result)
     }

@@ -383,6 +383,9 @@ public class BActivityThread extends IBActivityThread.Stub {
         }
         Application application;
         try {
+            // LoadedApk now owns the guest ClassLoader; Application.onCreate() has not run.
+            NativeLoader.loadForGuest(packageName, processName,
+                    BRLoadedApk.get(loadedApk).getClassLoader());
             onBeforeCreateApplication(packageName, processName, packageContext);
             application = BRLoadedApk.get(loadedApk).makeApplication(false, null);
             mInitialApplication = application;

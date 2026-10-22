@@ -53,6 +53,7 @@ object ObbManager {
         val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (downloadDir != null) {
             searchDirs.add(downloadDir)
+            downloadDir.listFiles()?.filter { it.isDirectory }?.forEach(searchDirs::add)
             searchDirs.add(File(downloadDir, packageName))
             searchDirs.add(File(downloadDir, "obb"))
             searchDirs.add(File(downloadDir, "OBB"))

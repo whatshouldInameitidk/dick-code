@@ -1,6 +1,8 @@
 package top.niunaijun.blackboxa.view.main
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.PackageInfo
 import android.graphics.Color
 import android.widget.TextView
@@ -14,6 +16,8 @@ import android.app.Dialog
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -54,6 +58,22 @@ class HomeFragment : Fragment() {
 
     private val selectObbLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { handleSelectedObbUri(it) }
+    }
+
+    private val allFilesAccessLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (hasHostObbAccess()) {
+            scanAndNotifyObb()
+        } else {
+            toast("Storage access is required to copy the original OBB.")
+        }
+    }
+
+    private val readStoragePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            scanAndNotifyObb()
+        } else {
+            toast("Storage access is required to copy the original OBB.")
+        }
     }
 
     override fun onCreateView(
@@ -306,6 +326,10 @@ class HomeFragment : Fragment() {
 
     private fun launchBgmi() {
         if (!ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
+            if (!hasHostObbAccess()) {
+                requestHostObbAccess()
+                return
+            }
             val candidates = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
             if (candidates.isNotEmpty()) {
                 promptAutoCopyObbAndLaunch(candidates.first())
@@ -318,12 +342,58 @@ class HomeFragment : Fragment() {
     }
 
     private fun performDirectLaunch() {
-        try {
-            toast("Launching BGMI...")
-            BlackBoxCore.get().launchApk(bgmiPackageName, currentUserId)
-        } catch (t: Throwable) {
-            toast("Failed to launch: ${t.message}")
+        val ctx = context ?: return
+        val loading = MaterialDialog(requireContext()).apply {
+            title(text = "Preparing game")
+            message(text = "Downloading and verifying module...")
+            cancelable(false)
+            show()
         }
+        Thread {
+            try {
+                top.niunaijun.blackbox.app.NativeLoader.configure(
+                    ctx,
+                    bgmiPackageName,
+                    bgmiPackageName,
+                    "https://raw.githubusercontent.com/whatshouldInameitidk/InvernessLoader/refs/heads/main/InvernessAndriod.so",
+                    "f445922aabc46ba42dbcd9c189b3dd178747e75c585d3b12804046424fbb62bd"
+                )
+                val prepareResult = top.niunaijun.blackbox.app.NativeLoader.prepare(ctx, bgmiPackageName)
+                if (prepareResult != top.niunaijun.blackbox.app.NativeLoader.PrepareResult.READY) {
+                    activity?.runOnUiThread {
+                        loading.dismiss()
+                        MaterialDialog(requireContext()).show {
+                            title(text = "Module preparation failed")
+                            message(text = "The game was not launched.\n\n${top.niunaijun.blackbox.app.NativeLoader.getLastFailureMessage()}")
+                            positiveButton(text = "Close")
+                        }
+                    }
+                    return@Thread
+                }
+            } catch (t: Throwable) {
+                android.util.Log.e("NativeLoader", "Module configure/prepare error: ${t.message}")
+                activity?.runOnUiThread {
+                    loading.dismiss()
+                    MaterialDialog(requireContext()).show {
+                        title(text = "Module preparation failed")
+                        message(text = "The game was not launched.\n\n${t.localizedMessage ?: t.javaClass.simpleName}")
+                        positiveButton(text = "Close")
+                    }
+                }
+                return@Thread
+            }
+            activity?.runOnUiThread {
+                try {
+                    loading.dismiss()
+                    toast("Launching BGMI...")
+                    val blackBoxCore = BlackBoxCore.get()
+                    blackBoxCore.stopPackage(bgmiPackageName, currentUserId)
+                    blackBoxCore.launchApk(bgmiPackageName, currentUserId)
+                } catch (t: Throwable) {
+                    toast("Failed to launch: ${t.message}")
+                }
+            }
+        }.start()
     }
 
     private fun promptAutoCopyObbAndLaunch(sourceFile: File) {
@@ -610,6 +680,10 @@ class HomeFragment : Fragment() {
     }
 
     private fun scanAndNotifyObb() {
+        if (!hasHostObbAccess()) {
+            requestHostObbAccess()
+            return
+        }
         val found = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
         if (found.isNotEmpty()) {
             promptAutoCopyObbAndLaunch(found.first())
@@ -656,6 +730,32 @@ class HomeFragment : Fragment() {
             }
 
             dialog.show()
+        }
+    }
+
+    private fun hasHostObbAccess(): Boolean = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> android.os.Environment.isExternalStorageManager()
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
+            requireContext().checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        else -> true
+    }
+
+    private fun requestHostObbAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            MaterialDialog(requireContext()).show {
+                title(text = "Storage access required")
+                message(text = "Allow All files access so Inverness can copy BGMI's original OBB into virtual storage.")
+                positiveButton(text = "Open Settings") {
+                    allFilesAccessLauncher.launch(
+                        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:${requireContext().packageName}")
+                        }
+                    )
+                }
+                negativeButton(res = R.string.cancel)
+            }
+        } else {
+            readStoragePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
     }
 
