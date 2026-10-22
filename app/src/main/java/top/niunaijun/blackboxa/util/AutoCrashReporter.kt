@@ -1,8 +1,7 @@
-﻿package top.niunaijun.blackboxa.util
+package top.niunaijun.blackboxa.util
 
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import android.os.Process
 import android.util.Log
 import top.niunaijun.blackbox.BlackBoxCore
@@ -17,17 +16,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Automatically captures crashes in real-time (host crashes, virtual app crashes, container errors,
- * native crashes, and process deaths) and sends comprehensive diagnostic text reports to the Telegram bot.
+ * and native crashes) and sends comprehensive diagnostic text reports to the Telegram bot.
  * Highly structured and detailed so AI or developers can immediately identify the root cause and fix it.
+ *
+ * Normal app closures (clean exit, back press, recent swipe) are strictly ignored and never reported.
  */
 object AutoCrashReporter {
 
     private const val TAG = "AutoCrashReporter"
     private const val PREFS = "auto_crash_reporter"
     private const val KEY_ENABLED = "send_crash_report"
-    private const val KEY_LAST_SENT_HASH = "last_sent_hash"
-    private const val KEY_LAST_SENT_TIME = "last_sent_time"
-    private const val KEY_LAST_LOGCAT_HASH = "last_logcat_hash"
 
     private val isSending = AtomicBoolean(false)
     private val lastReportTimeByPkg = ConcurrentHashMap<String, Long>()
@@ -152,14 +150,13 @@ object AutoCrashReporter {
     }
 
     /**
-     * Checks if there are pending crash reports on startup or when returning to MainActivity.
+     * Checks if there are leftover auto_crash_*.txt files from previous crashes that failed to upload.
      */
     fun checkAndSendPending(context: Context = App.getContext()) {
         if (!isEnabled()) return
         if (isSending.get()) return
         Thread {
             try {
-                // 1. Check for leftover auto_crash_*.txt files from previous crash terminations
                 val files = context.filesDir.listFiles { f ->
                     f.name.startsWith("auto_crash_") && f.name.endsWith(".txt")
                 }
@@ -171,39 +168,7 @@ object AutoCrashReporter {
                         val caption = buildCaption("Auto Crash Report (Pending)", pkg, null, error)
                         sendReportFile(file, caption)
                     }
-                    return@Thread
                 }
-
-                // 2. Check recorded crash history
-                val recorded = CrashRecorder.read().trim()
-                if (recorded.isNotEmpty()) {
-                    val hash = recorded.hashCode()
-                    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    val lastHash = prefs.getInt(KEY_LAST_SENT_HASH, 0)
-                    val lastTime = prefs.getLong(KEY_LAST_SENT_TIME, 0L)
-                    val now = System.currentTimeMillis()
-
-                    if (hash != lastHash && (now - lastTime > 30_000L)) {
-                        val reportContent = CrashReportCollector.collect()
-                        val reportFile = File(context.filesDir, "auto_crash_${System.currentTimeMillis()}.txt")
-                        reportFile.writeText(reportContent)
-
-                        val pkg = extractPackageFromText(recorded) ?: resolveCurrentPackage(recorded)
-                        val error = extractErrorFromText(recorded)
-                        val caption = buildCaption("Auto Crash Report (Diagnostic History)", pkg, null, error)
-
-                        val sent = sendReportFile(reportFile, caption)
-                        if (sent) {
-                            prefs.edit()
-                                .putInt(KEY_LAST_SENT_HASH, hash)
-                                .putLong(KEY_LAST_SENT_TIME, now)
-                                .apply()
-                        }
-                    }
-                }
-
-                // 3. Check system logcat crash buffer for native crashes (tombstones / SIGSEGV)
-                checkNativeCrashLogcat(context)
             } catch (t: Throwable) {
                 Log.e(TAG, "checkAndSendPending failed", t)
             }
@@ -211,14 +176,31 @@ object AutoCrashReporter {
     }
 
     /**
-     * Called when a virtual app process dies unexpectedly (e.g. Scudo abort, SIGSEGV, SIGABRT, OOM).
+     * Called when a virtual app process dies.
+     * Strictly verifies whether an actual crash occurred (native tombstone or fatal signal/scudo error).
+     * If the process exited normally (clean exit, back press, user close), NO report is sent.
      */
     fun onProcessDied(processName: String, packageName: String, pid: Int) {
         if (!isEnabled()) return
         Thread {
             try {
-                // Short grace period so system / scudo log buffers flush
-                Thread.sleep(400)
+                // Short wait to allow crash buffers/tombstones to flush if it was an actual crash
+                Thread.sleep(600)
+
+                // 1. Check if a native tombstone was freshly generated for this package (within last 20 seconds)
+                val tombstone = findAppTombstone(packageName)
+
+                // 2. Search live logcat specifically for fatal signals or memory corruption for this PID or process
+                val logcatLines = fetchCrashLogcat()
+                val fatalLine = findFatalLine(logcatLines, pid, packageName, processName)
+
+                // CRITICAL FILTER: If neither a fresh tombstone nor a fatal signal/error is found,
+                // this is a CLEAN / NORMAL EXIT (e.g. user closed the game or exited).
+                // Do NOT send any report!
+                if (fatalLine == null && tombstone.isNullOrBlank()) {
+                    Log.d(TAG, "Process $processName (PID $pid, $packageName) exited normally. Skipping crash report.")
+                    return@Thread
+                }
 
                 val now = System.currentTimeMillis()
                 val lastTime = lastReportTimeByPkg[packageName] ?: 0L
@@ -228,13 +210,9 @@ object AutoCrashReporter {
                 }
                 lastReportTimeByPkg[packageName] = now
 
-                val logcatLines = fetchCrashLogcat(pid, packageName)
-                val fatalLine = findFatalLine(logcatLines, pid, packageName)
-                val tombstone = findAppTombstone(packageName)
-
-                val crashSummary = fatalLine ?: "Process died unexpectedly (SIGABRT/Crash/OOM)"
+                val crashSummary = fatalLine ?: "Native crash detected (Tombstone generated)"
                 val caption = buildCaption(
-                    title = "Auto Crash: Virtual Process Died",
+                    title = "Auto Crash: Virtual Process Crashed",
                     packageName = packageName,
                     threadName = "PID $pid ($processName)",
                     errorSummary = crashSummary
@@ -247,7 +225,7 @@ object AutoCrashReporter {
                     append("                    INVERNESS VIRTUAL CRASH REPORT\n")
                     append("================================================================================\n")
                     append("[PROBLEM CLASSIFICATION & ROOT CAUSE]\n")
-                    append("Event: Virtual Process Died (binderDied)\n")
+                    append("Event: Virtual Process Crashed (SIGSEGV/SIGABRT/Crash)\n")
                     append("Package: ").append(packageName).append('\n')
                     append("Process: ").append(processName).append('\n')
                     append("App Name: ").append(getAppLabel(packageName)).append('\n')
@@ -281,7 +259,7 @@ object AutoCrashReporter {
                 reportFile.writeText(reportContent)
 
                 CrashRecorder.recordRaw(
-                    "Virtual Process Died: $packageName ($processName, PID $pid)\n" +
+                    "Virtual Process Crashed: $packageName ($processName, PID $pid)\n" +
                     "Cause: $crashSummary\n" +
                     (fatalLine ?: "")
                 )
@@ -344,7 +322,8 @@ object AutoCrashReporter {
             if (crashKitDir.exists() && crashKitDir.isDirectory) {
                 val tombs = crashKitDir.listFiles { f -> f.isFile && f.name.startsWith("tomb_") && f.name.endsWith(".txt") }
                 val newest = tombs?.maxByOrNull { it.lastModified() }
-                if (newest != null && newest.exists()) {
+                // Only consider it if it was created in the last 20 seconds
+                if (newest != null && newest.exists() && (System.currentTimeMillis() - newest.lastModified() < 20_000L)) {
                     newest.readText().take(30_000)
                 } else null
             } else null
@@ -353,118 +332,39 @@ object AutoCrashReporter {
         }
     }
 
-    private fun fetchCrashLogcat(pid: Int, packageName: String): List<String> {
+    private fun fetchCrashLogcat(): List<String> {
         val lines = mutableListOf<String>()
-        val context = App.getContext()
-
         try {
-            val downloadLog = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "${context.packageName}_logcat.txt")
-            if (downloadLog.exists() && downloadLog.length() > 0) {
-                val fileLines = downloadLog.readLines()
-                lines.addAll(fileLines.takeLast(500))
-            }
-        } catch (t: Throwable) {}
-
-        if (lines.size < 50) {
-            try {
-                val p = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "400").start()
-                val cmdLines = p.inputStream.bufferedReader().use { it.readLines() }
-                for (l in cmdLines) {
-                    if (!lines.contains(l)) {
-                        lines.add(l)
-                    }
-                }
-            } catch (t: Throwable) {}
+            val p = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "500").start()
+            val cmdLines = p.inputStream.bufferedReader().use { it.readLines() }
+            lines.addAll(cmdLines)
+        } catch (t: Throwable) {
+            Log.e(TAG, "fetchCrashLogcat failed", t)
         }
-
         return lines
     }
 
-    private fun findFatalLine(lines: List<String>, pid: Int, packageName: String): String? {
+    private fun findFatalLine(lines: List<String>, pid: Int, packageName: String, processName: String): String? {
         val pidStr = pid.toString()
         for (line in lines.asReversed()) {
-            val containsTarget = line.contains(pidStr) || line.contains(packageName)
+            val containsTarget = line.contains(pidStr) || line.contains(packageName) || line.contains(processName)
             if (containsTarget) {
-                if (line.contains("scudo", ignoreCase = true) ||
-                    line.contains("invalid chunk state", ignoreCase = true) ||
-                    line.contains("Fatal signal", ignoreCase = true) ||
+                if (line.contains("Fatal signal", ignoreCase = true) ||
                     line.contains("SIGSEGV", ignoreCase = true) ||
                     line.contains("SIGABRT", ignoreCase = true) ||
                     line.contains("SIGBUS", ignoreCase = true) ||
-                    line.contains("Abort message", ignoreCase = true) ||
+                    line.contains("SIGFPE", ignoreCase = true) ||
+                    line.contains("SIGILL", ignoreCase = true) ||
+                    line.contains("scudo ERROR", ignoreCase = true) ||
+                    line.contains("corrupted chunk header", ignoreCase = true) ||
+                    line.contains("invalid chunk state", ignoreCase = true) ||
+                    line.contains("Abort message:", ignoreCase = true) ||
                     line.contains("FATAL EXCEPTION", ignoreCase = true)) {
                     return line.trim()
                 }
             }
         }
-
-        for (line in lines.asReversed()) {
-            if (line.contains("scudo", ignoreCase = true) && line.contains("ERROR", ignoreCase = true)) {
-                return line.trim()
-            }
-            if (line.contains("Fatal signal", ignoreCase = true)) {
-                return line.trim()
-            }
-            if (line.contains("Abort message:", ignoreCase = true)) {
-                return line.trim()
-            }
-            if (line.contains("SIGSEGV") || line.contains("SIGABRT")) {
-                return line.trim()
-            }
-        }
-
         return null
-    }
-
-    private fun checkNativeCrashLogcat(context: Context) {
-        try {
-            var output = ""
-            try {
-                val process = ProcessBuilder("logcat", "-b", "crash", "-d", "-v", "threadtime").start()
-                output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-            } catch (t: Throwable) {}
-
-            if (output.isBlank()) {
-                val downloadLog = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "${context.packageName}_logcat.txt")
-                if (downloadLog.exists() && downloadLog.length() > 0) {
-                    val recent = downloadLog.readLines().takeLast(100)
-                    val fatal = recent.firstOrNull { 
-                        (it.contains("scudo", true) && it.contains("ERROR", true)) ||
-                        it.contains("Fatal signal", true) ||
-                        it.contains("SIGSEGV") ||
-                        it.contains("SIGABRT")
-                    }
-                    if (fatal != null) {
-                        output = recent.joinToString("\n")
-                    }
-                }
-            }
-
-            if (output.isNotBlank()) {
-                val hash = output.hashCode()
-                val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val lastHash = prefs.getInt(KEY_LAST_LOGCAT_HASH, 0)
-                if (hash != lastHash) {
-                    val reportContent = buildString {
-                        append("===== INVERNESS NATIVE CRASH REPORT =====\n")
-                        append("detected: ").append(timeFormat.format(Date())).append("\n\n")
-                        append(output).append("\n\n")
-                        append(CrashReportCollector.collect())
-                    }
-                    val reportFile = File(context.filesDir, "auto_crash_native_${System.currentTimeMillis()}.txt")
-                    reportFile.writeText(reportContent)
-
-                    val pkg = extractPackageFromText(output) ?: resolveCurrentPackage(output)
-                    val error = extractErrorFromText(output)
-                    val caption = buildCaption("Auto Crash Report (Native Crash)", pkg, null, error)
-
-                    val sent = sendReportFile(reportFile, caption)
-                    if (sent) {
-                        prefs.edit().putInt(KEY_LAST_LOGCAT_HASH, hash).apply()
-                    }
-                }
-            }
-        } catch (t: Throwable) {}
     }
 
     private fun sendReportFile(file: File, caption: String): Boolean {
