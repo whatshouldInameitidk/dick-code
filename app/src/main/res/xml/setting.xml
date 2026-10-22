@@ -1,14 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="Diagnostics">
+    <PreferenceCategory app:title="Crash Reporting">
+
+        <SwitchPreferenceCompat
+                app:key="send_crash_report"
+                app:icon="@drawable/ic_report"
+                android:title="Send Crash Report"
+                android:summary="Automatically send detailed crash logs to Telegram (@InvXCrashReporterBot) when BlackBox or any virtual app crashes"
+                android:defaultValue="true"/>
 
         <Preference
                 android:key="crash_report"
-                app:icon="@drawable/ic_report"
-                android:title="Crash Reporter"
-                android:summary="View system and virtual app crash logs"/>
+                android:title="Test &amp; Bot Status"
+                android:summary="Verify @InvXCrashReporterBot connection or trigger test report"/>
 
     </PreferenceCategory>
 

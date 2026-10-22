@@ -1,27 +1,20 @@
-package top.niunaijun.blackboxa.view.diagnostic
+﻿package top.niunaijun.blackboxa.view.diagnostic
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import top.niunaijun.blackboxa.R
 import top.niunaijun.blackboxa.databinding.ActivityCrashReportBinding
-import top.niunaijun.blackboxa.util.CrashRecorder
-import top.niunaijun.blackboxa.util.CrashReportCollector
-import top.niunaijun.blackboxa.util.TelegramReporter
-import top.niunaijun.blackboxa.util.getString
+import top.niunaijun.blackboxa.util.AutoCrashReporter
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
 import top.niunaijun.blackboxa.view.base.BaseActivity
-import java.io.File
 
 /**
- * Collects the crash log of the container and sends it to the telegram channel.
+ * Clean Crash Report settings activity.
+ * Provides a single toggle for Automatic Crash Reporting and a test button.
  */
 class CrashReportActivity : BaseActivity() {
 
     private val viewBinding: ActivityCrashReportBinding by inflate()
-
-    private var reportFile: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,76 +22,38 @@ class CrashReportActivity : BaseActivity() {
 
         initToolbar(viewBinding.toolbarLayout.toolbar, R.string.crash_report, true)
 
-        viewBinding.etToken.setText(TelegramReporter.token())
+        viewBinding.switchAutoReport.isChecked = AutoCrashReporter.isEnabled()
+        updateStatus(viewBinding.switchAutoReport.isChecked)
 
-        viewBinding.btnCollect.setOnClickListener { collect() }
-        viewBinding.btnSend.setOnClickListener { send() }
-        viewBinding.btnOpenChannel.setOnClickListener { openChannel() }
-        viewBinding.btnClear.setOnClickListener {
-            CrashRecorder.clear()
-            viewBinding.tvReport.text = ""
-            reportFile = null
-            viewBinding.tvStatus.setText(R.string.crash_cleared)
+        viewBinding.switchAutoReport.setOnCheckedChangeListener { _, isChecked ->
+            AutoCrashReporter.setEnabled(isChecked)
+            updateStatus(isChecked)
+            toast(if (isChecked) "Crash reporting enabled" else "Crash reporting disabled")
+        }
+
+        viewBinding.btnSendTestReport.setOnClickListener {
+            viewBinding.btnSendTestReport.isEnabled = false
+            viewBinding.tvStatus.text = "Sending test crash report to @InvXCrashReporterBot..."
+            AutoCrashReporter.sendTestReport(this) { success, message ->
+                runOnUiThread {
+                    viewBinding.btnSendTestReport.isEnabled = true
+                    if (success) {
+                        viewBinding.tvStatus.text = "✅ Successfully sent test crash report to Telegram!"
+                        toast("Test report delivered to bot")
+                    } else {
+                        viewBinding.tvStatus.text = "❌ Failed to send: $message"
+                        toast("Failed: $message")
+                    }
+                }
+            }
         }
     }
 
-    private fun collect() {
-        viewBinding.btnCollect.isEnabled = false
-        viewBinding.tvStatus.setText(R.string.crash_collecting)
-        Thread {
-            val text = CrashReportCollector.collect()
-            val file = File(filesDir, "blackbox_report_${System.currentTimeMillis()}.txt")
-            runCatching { file.writeText(text) }
-            // only the newest report is kept, the older ones are junk
-            runCatching {
-                filesDir.listFiles { f -> f.name.startsWith("blackbox_report_") }
-                    ?.filter { it != file }
-                    ?.forEach { it.delete() }
-            }
-            runOnUiThread {
-                viewBinding.btnCollect.isEnabled = true
-                viewBinding.tvReport.text = text.take(MAX_PREVIEW)
-                reportFile = file
-                viewBinding.tvStatus.text = getString(R.string.crash_collected, file.length())
-            }
-        }.start()
-    }
-
-    private fun send() {
-        val token = viewBinding.etToken.text.toString().trim().ifBlank {
-            TelegramReporter.DEFAULT_TOKEN
+    private fun updateStatus(enabled: Boolean) {
+        if (enabled) {
+            viewBinding.tvStatus.text = "Status: Active (Automatic reporting to @InvXCrashReporterBot enabled)"
+        } else {
+            viewBinding.tvStatus.text = "Status: Disabled (Crash logs will not be sent)"
         }
-        viewBinding.etToken.setText(token)
-        TelegramReporter.saveToken(token)
-
-        val file = reportFile
-        if (file == null || !file.exists()) {
-            viewBinding.tvStatus.setText(R.string.crash_collect_first)
-            return
-        }
-
-        viewBinding.btnSend.isEnabled = false
-        viewBinding.tvStatus.setText(R.string.crash_sending)
-        Thread {
-            val result = TelegramReporter.sendToOwner(
-                token,
-                file,
-                "BlackBox crash report ${file.name}"
-            )
-            runOnUiThread {
-                viewBinding.btnSend.isEnabled = true
-                viewBinding.tvStatus.text = result.message
-                if (result.success) toast(R.string.crash_sent)
-            }
-        }.start()
-    }
-
-    private fun openChannel() {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(TelegramReporter.BOT_URL))
-        startActivity(intent)
-    }
-
-    companion object {
-        private const val MAX_PREVIEW = 60_000
     }
 }

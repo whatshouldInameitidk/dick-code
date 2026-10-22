@@ -22,53 +22,65 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Send Crash Report"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Automatically send detailed crash logs to @InvXCrashReporterBot when BlackBox or any virtual app crashes"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchAutoReport"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:checked="true" />
+            </LinearLayout>
 
             <TextView
+                android:id="@+id/tvBotInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/crash_token_hint"
-                android:textSize="13sp" />
-
-            <EditText
-                android:id="@+id/etToken"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/crash_token"
-                android:inputType="textPassword"
-                android:maxLines="1"
-                android:textSize="14sp" />
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="16dp"
+                android:text="Target: @InvXCrashReporterBot\nDetailed device metadata, stack traces, and recent logcat will be delivered automatically."
+                android:textSize="12sp" />
 
             <Button
-                android:id="@+id/btnCollect"
+                android:id="@+id/btnSendTestReport"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/crash_collect" />
-
-            <Button
-                android:id="@+id/btnSend"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/crash_send" />
-
-            <Button
-                android:id="@+id/btnOpenChannel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/crash_open_channel" />
-
-            <Button
-                android:id="@+id/btnClear"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/crash_clear" />
+                android:text="Send Test Report to Bot" />
 
             <TextView
                 android:id="@+id/tvStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="12dp"
+                android:text="Status: Active (Automatic reporting enabled)"
                 android:textSize="13sp" />
 
             <TextView
@@ -78,8 +90,7 @@
                 android:layout_marginTop="12dp"
                 android:fontFamily="monospace"
                 android:textIsSelectable="true"
-                android:textSize="10sp"
-                tools:text="===== BlackBox crash report =====" />
+                android:textSize="10sp" />
         </LinearLayout>
     </ScrollView>
 

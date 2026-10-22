@@ -1,4 +1,4 @@
-package top.niunaijun.blackboxa.util
+﻿package top.niunaijun.blackboxa.util
 
 import android.content.Context
 import android.os.Build
@@ -16,13 +16,15 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Automatically captures crashes in real-time (host crashes, virtual app crashes, container errors)
- * and sends the diagnostic report to the Telegram crash bot with detailed device, OS, and app metadata.
+ * Automatically captures crashes in real-time (host crashes, virtual app crashes, container errors,
+ * native crashes, and process deaths) and sends comprehensive diagnostic text reports to the Telegram bot.
+ * Highly structured and detailed so AI or developers can immediately identify the root cause and fix it.
  */
 object AutoCrashReporter {
 
     private const val TAG = "AutoCrashReporter"
     private const val PREFS = "auto_crash_reporter"
+    private const val KEY_ENABLED = "send_crash_report"
     private const val KEY_LAST_SENT_HASH = "last_sent_hash"
     private const val KEY_LAST_SENT_TIME = "last_sent_time"
     private const val KEY_LAST_LOGCAT_HASH = "last_logcat_hash"
@@ -30,6 +32,22 @@ object AutoCrashReporter {
     private val isSending = AtomicBoolean(false)
     private val lastReportTimeByPkg = ConcurrentHashMap<String, Long>()
     private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+
+    /**
+     * Checks if automatic crash reporting is enabled. Enabled by default.
+     */
+    fun isEnabled(): Boolean {
+        val prefs = App.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_ENABLED, true)
+    }
+
+    /**
+     * Enables or disables automatic crash reporting.
+     */
+    fun setEnabled(enabled: Boolean) {
+        val prefs = App.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()
+    }
 
     /**
      * Builds a rich, human-readable Telegram caption containing device model,
@@ -60,7 +78,7 @@ object AutoCrashReporter {
             if (!threadName.isNullOrBlank()) {
                 append("🧵 Thread: ").append(threadName).append('\n')
             }
-            append("⏱️ Time: ").append(timeFormat.format(Date())).append('\n')
+            append("⏱ Time: ").append(timeFormat.format(Date())).append('\n')
             if (!errorSummary.isNullOrBlank()) {
                 append("💥 Error: ").append(errorSummary.trim().take(150))
             }
@@ -71,6 +89,7 @@ object AutoCrashReporter {
      * Called immediately when an uncaught exception is thrown (host, virtual app, or background thread).
      */
     fun onCrash(thread: Thread, throwable: Throwable, source: String, syncWait: Boolean = true) {
+        if (!isEnabled()) return
         try {
             val crashTime = timeFormat.format(Date())
             val stackTrace = Log.getStackTraceString(throwable)
@@ -89,17 +108,27 @@ object AutoCrashReporter {
             val context = App.getContext()
             val reportFile = File(context.filesDir, "auto_crash_${System.currentTimeMillis()}.txt")
             val reportContent = buildString {
-                append("===== INVERNESS AUTO CRASH REPORT =====\n")
-                append("source: ").append(source).append('\n')
-                append("package: ").append(currentPkg).append('\n')
-                append("app_name: ").append(getAppLabel(currentPkg)).append('\n')
-                append("thread: ").append(thread.name).append('\n')
-                append("time: ").append(crashTime).append('\n')
-                append("pid: ").append(Process.myPid()).append('\n')
-                append("device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
-                    .append(" (api ").append(Build.VERSION.SDK_INT).append(")\n\n")
-                append("===== CRASH STACK TRACE =====\n")
+                append("================================================================================\n")
+                append("                    INVERNESS AUTOMATIC CRASH REPORT\n")
+                append("================================================================================\n")
+                append("[PROBLEM CLASSIFICATION & ROOT CAUSE]\n")
+                append("Event: ").append(source).append('\n')
+                append("Package: ").append(currentPkg).append('\n')
+                append("App Name: ").append(getAppLabel(currentPkg)).append('\n')
+                append("Thread: ").append(thread.name).append('\n')
+                append("PID: ").append(Process.myPid()).append('\n')
+                append("Timestamp: ").append(crashTime).append('\n')
+                append("Root Exception: ").append(firstLine).append("\n\n")
+
+                append("[ENVIRONMENT & DEVICE METADATA]\n")
+                append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+                append("Android: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
+                append("Supported ABIs: ").append(Build.SUPPORTED_ABIS.joinToString()).append('\n')
+                append("Board / Hardware: ").append(Build.BOARD).append(" / ").append(Build.HARDWARE).append("\n\n")
+
+                append("[FULL CRASH STACK TRACE]\n")
                 append(stackTrace).append("\n\n")
+
                 append(CrashReportCollector.collect())
             }
 
@@ -107,7 +136,6 @@ object AutoCrashReporter {
             Log.w(TAG, "Recorded auto crash to ${reportFile.name}, sending to Telegram bot...")
 
             if (syncWait) {
-                // If process is terminating, grant a brief synchronous upload window (up to 4s)
                 val uploadThread = Thread {
                     sendReportFile(reportFile, caption)
                 }
@@ -127,6 +155,7 @@ object AutoCrashReporter {
      * Checks if there are pending crash reports on startup or when returning to MainActivity.
      */
     fun checkAndSendPending(context: Context = App.getContext()) {
+        if (!isEnabled()) return
         if (isSending.get()) return
         Thread {
             try {
@@ -183,14 +212,13 @@ object AutoCrashReporter {
 
     /**
      * Called when a virtual app process dies unexpectedly (e.g. Scudo abort, SIGSEGV, SIGABRT, OOM).
-     * Extracts logcat surrounding the death, identifies fatal crash cause, logs to CrashRecorder,
-     * and sends the full diagnostic report to Telegram immediately.
      */
     fun onProcessDied(processName: String, packageName: String, pid: Int) {
+        if (!isEnabled()) return
         Thread {
             try {
                 // Short grace period so system / scudo log buffers flush
-                Thread.sleep(350)
+                Thread.sleep(400)
 
                 val now = System.currentTimeMillis()
                 val lastTime = lastReportTimeByPkg[packageName] ?: 0L
@@ -202,6 +230,7 @@ object AutoCrashReporter {
 
                 val logcatLines = fetchCrashLogcat(pid, packageName)
                 val fatalLine = findFatalLine(logcatLines, pid, packageName)
+                val tombstone = findAppTombstone(packageName)
 
                 val crashSummary = fatalLine ?: "Process died unexpectedly (SIGABRT/Crash/OOM)"
                 val caption = buildCaption(
@@ -214,27 +243,43 @@ object AutoCrashReporter {
                 val context = App.getContext()
                 val reportFile = File(context.filesDir, "auto_crash_process_${System.currentTimeMillis()}.txt")
                 val reportContent = buildString {
-                    append("===== INVERNESS VIRTUAL CRASH REPORT =====\n")
-                    append("event: Virtual Process Died (binderDied)\n")
-                    append("package: ").append(packageName).append('\n')
-                    append("process: ").append(processName).append('\n')
-                    append("app_name: ").append(getAppLabel(packageName)).append('\n')
-                    append("pid: ").append(pid).append('\n')
-                    append("time: ").append(timeFormat.format(Date())).append('\n')
-                    append("cause: ").append(crashSummary).append('\n')
-                    append("device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
-                        .append(" (Android ").append(Build.VERSION.RELEASE).append(", API ").append(Build.VERSION.SDK_INT).append(")\n\n")
-                    append("===== MATCHED ERROR / CRASH CONTEXT =====\n")
-                    if (fatalLine != null) {
-                        append(fatalLine).append("\n\n")
+                    append("================================================================================\n")
+                    append("                    INVERNESS VIRTUAL CRASH REPORT\n")
+                    append("================================================================================\n")
+                    append("[PROBLEM CLASSIFICATION & ROOT CAUSE]\n")
+                    append("Event: Virtual Process Died (binderDied)\n")
+                    append("Package: ").append(packageName).append('\n')
+                    append("Process: ").append(processName).append('\n')
+                    append("App Name: ").append(getAppLabel(packageName)).append('\n')
+                    append("PID: ").append(pid).append('\n')
+                    append("Timestamp: ").append(timeFormat.format(Date())).append('\n')
+                    append("Cause: ").append(crashSummary).append("\n\n")
+
+                    append("[ENVIRONMENT & DEVICE METADATA]\n")
+                    append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+                    append("Android: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
+                    append("Supported ABIs: ").append(Build.SUPPORTED_ABIS.joinToString()).append('\n')
+                    append("Hardware: ").append(Build.HARDWARE).append("\n\n")
+
+                    if (!tombstone.isNullOrBlank()) {
+                        append("================================================================================\n")
+                        append("                    NATIVE CRASHKIT / TOMBSTONE DUMP\n")
+                        append("================================================================================\n")
+                        append(tombstone).append("\n\n")
                     }
-                    append("===== RECENT PROCESS & SYSTEM LOGCAT =====\n")
-                    logcatLines.takeLast(200).forEach { append(it).append('\n') }
+
+                    append("================================================================================\n")
+                    append("                    MATCHED ERROR & LOGCAT CONTEXT\n")
+                    append("================================================================================\n")
+                    if (fatalLine != null) {
+                        append("Fatal Error Line:\n").append(fatalLine).append("\n\n")
+                    }
+                    append("Recent Process & System Logcat:\n")
+                    logcatLines.takeLast(250).forEach { append(it).append('\n') }
                 }
 
                 reportFile.writeText(reportContent)
 
-                // Record into CrashRecorder so user sees it in the app's Crash Report UI
                 CrashRecorder.recordRaw(
                     "Virtual Process Died: $packageName ($processName, PID $pid)\n" +
                     "Cause: $crashSummary\n" +
@@ -249,22 +294,77 @@ object AutoCrashReporter {
         }.start()
     }
 
+    /**
+     * Sends a test crash report to verify that the bot is properly receiving detailed logs.
+     */
+    fun sendTestReport(context: Context, callback: ((Boolean, String) -> Unit)? = null) {
+        Thread {
+            try {
+                val currentPkg = resolveCurrentPackage()
+                val caption = buildCaption(
+                    title = "Test Crash Report",
+                    packageName = currentPkg,
+                    threadName = Thread.currentThread().name,
+                    errorSummary = "Test report triggered to verify Telegram bot connectivity"
+                )
+                val reportFile = File(context.filesDir, "auto_crash_test_${System.currentTimeMillis()}.txt")
+                val reportContent = buildString {
+                    append("================================================================================\n")
+                    append("               INVERNESS AUTOMATIC CRASH REPORT (TEST VERIFICATION)\n")
+                    append("================================================================================\n")
+                    append("[SYSTEM STATUS]\n")
+                    append("Status: Telegram Crash Reporting is ACTIVE and verified.\n")
+                    append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
+                    append("Android: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
+                    append("Supported ABIs: ").append(Build.SUPPORTED_ABIS.joinToString()).append('\n')
+                    append("Package: ").append(currentPkg).append('\n')
+                    append("App Name: ").append(getAppLabel(currentPkg)).append('\n')
+                    append("Host PID: ").append(Process.myPid()).append('\n')
+                    append("Timestamp: ").append(timeFormat.format(Date())).append("\n\n")
+                    append("================================================================================\n")
+                    append("                            DIAGNOSTIC REPORT\n")
+                    append("================================================================================\n\n")
+                    append(CrashReportCollector.collect())
+                }
+                reportFile.writeText(reportContent)
+                val token = TelegramReporter.token()
+                val result = TelegramReporter.sendToOwner(token, reportFile, caption)
+                reportFile.delete()
+                callback?.invoke(result.success, result.message)
+            } catch (t: Throwable) {
+                callback?.invoke(false, t.message ?: "Unknown error")
+            }
+        }.start()
+    }
+
+    private fun findAppTombstone(packageName: String): String? {
+        return try {
+            val context = App.getContext()
+            val crashKitDir = File(context.filesDir.parentFile, "blackbox/data/user/0/$packageName/app_crashKit")
+            if (crashKitDir.exists() && crashKitDir.isDirectory) {
+                val tombs = crashKitDir.listFiles { f -> f.isFile && f.name.startsWith("tomb_") && f.name.endsWith(".txt") }
+                val newest = tombs?.maxByOrNull { it.lastModified() }
+                if (newest != null && newest.exists()) {
+                    newest.readText().take(30_000)
+                } else null
+            } else null
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     private fun fetchCrashLogcat(pid: Int, packageName: String): List<String> {
         val lines = mutableListOf<String>()
         val context = App.getContext()
 
-        // 1. Read from the continuous logcat file if available
         try {
             val downloadLog = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "${context.packageName}_logcat.txt")
             if (downloadLog.exists() && downloadLog.length() > 0) {
                 val fileLines = downloadLog.readLines()
                 lines.addAll(fileLines.takeLast(500))
             }
-        } catch (t: Throwable) {
-            // Ignore file read error
-        }
+        } catch (t: Throwable) {}
 
-        // 2. If lines are empty or few, run logcat command
         if (lines.size < 50) {
             try {
                 val p = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "400").start()
@@ -274,9 +374,7 @@ object AutoCrashReporter {
                         lines.add(l)
                     }
                 }
-            } catch (t: Throwable) {
-                // Ignore process error
-            }
+            } catch (t: Throwable) {}
         }
 
         return lines
@@ -284,7 +382,6 @@ object AutoCrashReporter {
 
     private fun findFatalLine(lines: List<String>, pid: Int, packageName: String): String? {
         val pidStr = pid.toString()
-        // Priority 1: Direct crash / scudo / signal matching this PID or package
         for (line in lines.asReversed()) {
             val containsTarget = line.contains(pidStr) || line.contains(packageName)
             if (containsTarget) {
@@ -301,7 +398,6 @@ object AutoCrashReporter {
             }
         }
 
-        // Priority 2: Any scudo error or fatal signal in recent buffer
         for (line in lines.asReversed()) {
             if (line.contains("scudo", ignoreCase = true) && line.contains("ERROR", ignoreCase = true)) {
                 return line.trim()
@@ -368,9 +464,7 @@ object AutoCrashReporter {
                     }
                 }
             }
-        } catch (t: Throwable) {
-            // ignore logcat failure
-        }
+        } catch (t: Throwable) {}
     }
 
     private fun sendReportFile(file: File, caption: String): Boolean {

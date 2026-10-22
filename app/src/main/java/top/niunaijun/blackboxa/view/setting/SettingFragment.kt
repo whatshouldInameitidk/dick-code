@@ -1,4 +1,4 @@
-package top.niunaijun.blackboxa.view.setting
+﻿package top.niunaijun.blackboxa.view.setting
 
 import android.content.Intent
 import android.os.Bundle
@@ -41,7 +41,7 @@ class SettingFragment : PreferenceFragmentCompat() {
             BlackBoxCore.get().isXPEnable = (newValue == true)
             true
         }
-        //xp模块跳转
+        //xpæ¨¡å—è·³è½¬
         xpModule = findPreference("xp_module")!!
         xpModule.setOnPreferenceClickListener {
             val intent = Intent(requireActivity(), XpActivity::class.java)
