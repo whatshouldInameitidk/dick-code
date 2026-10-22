@@ -688,14 +688,16 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
             }
 
             PackageInfo packageArchiveInfo = BlackBoxCore.getPackageManager().getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
-            if (packageArchiveInfo == null) {
+            if (packageArchiveInfo == null && !option.isFlag(InstallOption.FLAG_SYSTEM)) {
                 return result.installError("getPackageArchiveInfo error.Please check whether APK is normal.");
             }
 
             boolean support = AbiUtils.isSupport(apkFile);
             if (!support) {
-                String msg = packageArchiveInfo.applicationInfo.loadLabel(BlackBoxCore.getPackageManager()) + "[" + packageArchiveInfo.packageName + "]";
-                return result.installError(packageArchiveInfo.packageName,
+                String msg = (packageArchiveInfo != null && packageArchiveInfo.applicationInfo != null)
+                        ? packageArchiveInfo.applicationInfo.loadLabel(BlackBoxCore.getPackageManager()) + "[" + packageArchiveInfo.packageName + "]"
+                        : apkFile.getName();
+                return result.installError(packageArchiveInfo != null ? packageArchiveInfo.packageName : "",
                         msg + "\n" + (BlackBoxCore.is64Bit() ? "The box does not support 32-bit Application" : "The box does not support 64-bit Application"));
             }
             PackageParser.Package aPackage = parserApk(apkFile.getAbsolutePath());
@@ -719,6 +721,7 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
             synchronized (mPackages) {
                 bPackageSettings.setInstalled(true, userId);
                 bPackageSettings.save();
+                mPackages.put(bPackageSettings.pkg.packageName, bPackageSettings);
             }
             mComponentResolver.removeAllComponents(bPackageSettings.pkg);
             mComponentResolver.addAllComponents(bPackageSettings.pkg);
@@ -727,6 +730,8 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
             return result;
         } catch (Throwable t) {
             t.printStackTrace();
+            Slog.e(TAG, "installPackageAsUserLocked exception: " + t.getMessage(), t);
+            result.installError("Exception during install: " + t.getMessage());
         } finally {
             if (apkFile != null && option.isFlag(InstallOption.FLAG_URI_FILE)) {
                 FileUtils.deleteDir(apkFile);
@@ -740,7 +745,11 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
         try {
             PackageParser parser = PackageParserCompat.createParser(new File(file));
             PackageParser.Package aPackage = PackageParserCompat.parsePackage(parser, new File(file), 0);
-            PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            try {
+                PackageParserCompat.collectCertificates(parser, aPackage, 0);
+            } catch (Throwable t) {
+                Slog.e(TAG, "collectCertificates failed for " + file + ": " + t.getMessage());
+            }
             return aPackage;
         } catch (Throwable t) {
             t.printStackTrace();
@@ -799,7 +808,11 @@ public class BPackageManagerService extends IBPackageManagerService.Stub impleme
 
     void onPackageInstalled(String packageName, int userId) {
         for (PackageMonitor packageMonitor : mPackageMonitors) {
-            packageMonitor.onPackageInstalled(packageName, userId);
+            try {
+                packageMonitor.onPackageInstalled(packageName, userId);
+            } catch (Throwable t) {
+                Slog.e(TAG, "packageMonitor onPackageInstalled error: " + t.getMessage(), t);
+            }
         }
         Slog.d(TAG, "onPackageInstalled: " + packageName + ", userId: " + userId);
     }

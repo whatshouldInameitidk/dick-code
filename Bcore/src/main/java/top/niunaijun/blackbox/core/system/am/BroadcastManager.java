@@ -1,6 +1,8 @@
 package top.niunaijun.blackbox.core.system.am;
 
 import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -84,9 +86,17 @@ public class BroadcastManager implements PackageMonitor {
             for (BPackage.Activity receiver : bPackage.receivers) {
                 List<BPackage.ActivityIntentInfo> intents = receiver.intents;
                 for (BPackage.ActivityIntentInfo intent : intents) {
-                    ProxyBroadcastReceiver proxyBroadcastReceiver = new ProxyBroadcastReceiver();
-                    BlackBoxCore.getContext().registerReceiver(proxyBroadcastReceiver, intent.intentFilter);
-                    addReceiver(bPackage.packageName, proxyBroadcastReceiver);
+                    try {
+                        ProxyBroadcastReceiver proxyBroadcastReceiver = new ProxyBroadcastReceiver();
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            BlackBoxCore.getContext().registerReceiver(proxyBroadcastReceiver, intent.intentFilter, Context.RECEIVER_EXPORTED);
+                        } else {
+                            BlackBoxCore.getContext().registerReceiver(proxyBroadcastReceiver, intent.intentFilter);
+                        }
+                        addReceiver(bPackage.packageName, proxyBroadcastReceiver);
+                    } catch (Throwable t) {
+                        Slog.e(TAG, "registerReceiver error for " + bPackage.packageName + ": " + t.getMessage());
+                    }
                 }
             }
         }

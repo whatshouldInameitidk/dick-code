@@ -4,6 +4,9 @@ import android.content.ComponentName;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import top.niunaijun.blackbox.BlackBoxCore;
 import android.content.pm.ConfigurationInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.InstrumentationInfo;
@@ -31,6 +34,18 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
  * 此处无Bug
  */
 public class BPackage implements Parcelable {
+    @SuppressWarnings("unchecked")
+    private static Object getFieldValue(Object obj, String fieldName, Object defaultValue) {
+        if (obj == null) return defaultValue;
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object v = f.get(obj);
+            return v != null ? v : defaultValue;
+        } catch (Throwable t) {
+            return defaultValue;
+        }
+    }
     public ArrayList<Activity> activities = new ArrayList<Activity>(0);
     public ArrayList<Activity> receivers = new ArrayList<Activity>(0);
     public ArrayList<Provider> providers = new ArrayList<Provider>(0);
@@ -125,25 +140,50 @@ public class BPackage implements Parcelable {
 
         this.requestedPermissions = aPackage.requestedPermissions;
         if (BuildCompat.isPie()) {
-            this.mSigningDetails = new SigningDetails(aPackage.mSigningDetails);
-            this.mSignatures = this.mSigningDetails.signatures;
+            if (aPackage.mSigningDetails != null) {
+                this.mSigningDetails = new SigningDetails(aPackage.mSigningDetails);
+                this.mSignatures = this.mSigningDetails.signatures;
+            } else {
+                this.mSignatures = aPackage.mSignatures;
+            }
         } else {
             this.mSignatures = aPackage.mSignatures;
         }
-        this.mAppMetaData = aPackage.mAppMetaData;
-        // this.mExtras = new BPackageSettings((PackageSetting) aPackage.mExtras);
-        this.packageName = aPackage.packageName;
-        this.mPreferredOrder = aPackage.mPreferredOrder;
-        this.mSharedUserId = aPackage.mSharedUserId;
-        this.usesLibraries = aPackage.usesLibraries;
-        this.usesOptionalLibraries = aPackage.usesOptionalLibraries;
-        this.mVersionCode = aPackage.mVersionCode;
-        this.applicationInfo = aPackage.applicationInfo;
-        this.mVersionName = aPackage.mVersionName;
-        this.baseCodePath = aPackage.baseCodePath;
-        this.mSharedUserLabel = aPackage.mSharedUserLabel;
-        this.configPreferences = aPackage.configPreferences;
-        this.reqFeatures = aPackage.reqFeatures;
+        if ((this.mSignatures == null || this.mSignatures.length == 0) && aPackage.packageName != null) {
+            try {
+                PackageInfo hostPi = BlackBoxCore.getPackageManager().getPackageInfo(aPackage.packageName, PackageManager.GET_SIGNATURES);
+                if (hostPi != null && hostPi.signatures != null) {
+                    this.mSignatures = hostPi.signatures;
+                    if (this.mSigningDetails == null) {
+                        this.mSigningDetails = new SigningDetails();
+                        this.mSigningDetails.signatures = hostPi.signatures;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        this.mAppMetaData = (Bundle) getFieldValue(aPackage, "mAppMetaData", null);
+        this.packageName = (String) getFieldValue(aPackage, "packageName", "");
+        this.mPreferredOrder = (Integer) getFieldValue(aPackage, "mPreferredOrder", 0);
+        this.mSharedUserId = (String) getFieldValue(aPackage, "mSharedUserId", null);
+        this.usesLibraries = (ArrayList<String>) getFieldValue(aPackage, "usesLibraries", new ArrayList<String>());
+        this.usesOptionalLibraries = (ArrayList<String>) getFieldValue(aPackage, "usesOptionalLibraries", new ArrayList<String>());
+        this.mVersionCode = (Integer) getFieldValue(aPackage, "mVersionCode", 0);
+        this.applicationInfo = (ApplicationInfo) getFieldValue(aPackage, "applicationInfo", null);
+        this.mVersionName = (String) getFieldValue(aPackage, "mVersionName", null);
+
+        String codePath = (String) getFieldValue(aPackage, "baseCodePath", null);
+        if (codePath == null) {
+            codePath = (String) getFieldValue(aPackage, "codePath", null);
+        }
+        if (codePath == null && this.applicationInfo != null) {
+            codePath = this.applicationInfo.sourceDir;
+        }
+        this.baseCodePath = codePath;
+
+        this.mSharedUserLabel = (Integer) getFieldValue(aPackage, "mSharedUserLabel", 0);
+        this.configPreferences = (ArrayList<ConfigurationInfo>) getFieldValue(aPackage, "configPreferences", null);
+        this.reqFeatures = (ArrayList<FeatureInfo>) getFieldValue(aPackage, "reqFeatures", null);
     }
 
     protected BPackage(Parcel in) {
@@ -450,12 +490,31 @@ public class BPackage implements Parcelable {
             dest.writeTypedArray(this.signatures, flags);
         }
 
+        public SigningDetails() {
+            this.signatures = new Signature[0];
+        }
+
         public SigningDetails(PackageParser.SigningDetails signingDetails) {
-            if (signingDetails.pastSigningCertificates == null) {
-                this.signatures = signingDetails.signatures;
-            } else {
-                this.signatures = signingDetails.pastSigningCertificates;
+            if (signingDetails == null) {
+                this.signatures = new Signature[0];
+                return;
             }
+            Signature[] sigs = null;
+            try {
+                java.lang.reflect.Field field = signingDetails.getClass().getDeclaredField("pastSigningCertificates");
+                field.setAccessible(true);
+                sigs = (Signature[]) field.get(signingDetails);
+            } catch (Throwable ignored) {
+            }
+            if (sigs == null) {
+                try {
+                    java.lang.reflect.Field field = signingDetails.getClass().getDeclaredField("signatures");
+                    field.setAccessible(true);
+                    sigs = (Signature[]) field.get(signingDetails);
+                } catch (Throwable ignored) {
+                }
+            }
+            this.signatures = sigs != null ? sigs : new Signature[0];
         }
 
         protected SigningDetails(Parcel in) {

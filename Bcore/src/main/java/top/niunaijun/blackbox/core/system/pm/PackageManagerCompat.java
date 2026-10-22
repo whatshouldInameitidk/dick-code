@@ -278,6 +278,27 @@ public class PackageManagerCompat {
     }
 
     public static ApplicationInfo generateApplicationInfo(BPackage p, int flags, BPackageUserState state, int userId) {
+        if (p == null) {
+            return null;
+        }
+        if (p.applicationInfo == null) {
+            try {
+                if (p.installOption != null && p.installOption.isFlag(InstallOption.FLAG_SYSTEM)) {
+                    p.applicationInfo = BlackBoxCore.getPackageManager().getApplicationInfo(p.packageName, flags);
+                } else if (p.baseCodePath != null) {
+                    PackageInfo pi = BlackBoxCore.getPackageManager().getPackageArchiveInfo(p.baseCodePath, 0);
+                    if (pi != null) {
+                        p.applicationInfo = pi.applicationInfo;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        if (p.applicationInfo == null) {
+            p.applicationInfo = new ApplicationInfo();
+            p.applicationInfo.packageName = p.packageName;
+            p.applicationInfo.processName = p.packageName;
+        }
         if (!checkUseInstalledOrHidden(flags, state, p.applicationInfo)) {
             return null;
         }
@@ -288,10 +309,6 @@ public class PackageManagerCompat {
             return null;
         }
         String sourceDir = p.baseCodePath;
-        if (p.applicationInfo == null) {
-            p.applicationInfo = BlackBoxCore.getPackageManager()
-                    .getPackageArchiveInfo(sourceDir, 0).applicationInfo;
-        }
         ApplicationInfo ai = new ApplicationInfo(p.applicationInfo);
         if ((flags & PackageManager.GET_META_DATA) != 0) {
             ai.metaData = p.mAppMetaData;
@@ -370,7 +387,7 @@ public class PackageManagerCompat {
 
     private static boolean checkUseInstalledOrHidden(int flags, BPackageUserState state,
                                                      ApplicationInfo appInfo) {
-        if (AppSystemEnv.isBlackPackage(appInfo.packageName))
+        if (appInfo != null && appInfo.packageName != null && AppSystemEnv.isBlackPackage(appInfo.packageName))
             return false;
         // Returns false if the package is hidden system app until installed.
         if (!state.installed || state.hidden) {

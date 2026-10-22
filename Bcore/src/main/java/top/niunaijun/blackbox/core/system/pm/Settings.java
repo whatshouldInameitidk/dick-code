@@ -212,7 +212,8 @@ import top.niunaijun.blackbox.utils.compat.PackageParserCompat;
                         Slog.e(TAG, "re-install of " + packageName + " failed, keeping the cached package: " + t);
                     }
                 }
-            } else {
+            }
+            if (bPackageSettings.pkg.applicationInfo == null) {
                 bPackageSettings.pkg.applicationInfo = PackageManagerCompat.generateApplicationInfo(bPackageSettings.pkg, 0, BPackageUserState.create(), 0);
             }
             bPackageSettings.save();

@@ -213,15 +213,18 @@ class HomeFragment : Fragment() {
             try {
                 val blackBoxCore = BlackBoxCore.get()
                 val installResult = blackBoxCore.installPackageAsUser(bgmiPackageName, currentUserId)
+                val isInstalled = blackBoxCore.isInstalled(bgmiPackageName, currentUserId)
 
                 activity?.runOnUiThread {
                     loading.dismiss()
-                    if (installResult.success) {
+                    if (installResult.success && isInstalled) {
                         toast("BGMI installed successfully!")
                         updateUI()
                         (activity as? MainActivity)?.refreshHomeAndApps()
                     } else {
-                        toast("Install failed: ${installResult.msg}")
+                        val errorDetail = if (!installResult.success) installResult.msg else "Verification failed: app not active in virtual space"
+                        toast("Install failed: $errorDetail")
+                        updateUI()
                     }
                 }
             } catch (t: Throwable) {

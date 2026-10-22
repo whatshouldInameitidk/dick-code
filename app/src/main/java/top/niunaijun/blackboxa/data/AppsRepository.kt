@@ -333,6 +333,9 @@ class AppsRepository {
         }
 
         val id = userList.last().id
+        if (id == 0) {
+            return
+        }
 
         if (blackBoxCore.getInstalledApplications(0, id).isEmpty()) {
             blackBoxCore.deleteUser(id)

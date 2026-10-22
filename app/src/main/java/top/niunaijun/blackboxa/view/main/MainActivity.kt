@@ -45,6 +45,69 @@ class MainActivity : LoadingActivity() {
         initBottomNav()
         initFab()
         top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(this, manual = false)
+        handleDebugIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleDebugIntent(intent)
+    }
+
+    private fun handleDebugIntent(intent: Intent?) {
+        val testPkg = intent?.getStringExtra("test_install")
+        if (!testPkg.isNullOrEmpty()) {
+            Thread {
+                try {
+                    android.util.Log.e("DEBUG_INTENT", "Starting test install for $testPkg, user: $currentUser")
+                    val result = BlackBoxCore.get().installPackageAsUser(testPkg, currentUser)
+                    val installed = BlackBoxCore.get().isInstalled(testPkg, currentUser)
+                    val apps = BlackBoxCore.get().getInstalledApplications(0, currentUser)
+                    android.util.Log.e("DEBUG_INTENT", "Install result: success=${result.success}, msg=${result.msg}, isInstalled=$installed, appCount=${apps.size}")
+                    runOnUiThread {
+                        refreshHomeAndApps()
+                    }
+                } catch (t: Throwable) {
+                    android.util.Log.e("DEBUG_INTENT", "Test install exception", t)
+                }
+            }.start()
+        }
+
+        val launchPkg = intent?.getStringExtra("test_launch")
+        if (!launchPkg.isNullOrEmpty()) {
+            Thread {
+                try {
+                    android.util.Log.e("DEBUG_INTENT", "Starting test launch for $launchPkg, user: $currentUser")
+                    val res = BlackBoxCore.get().launchApk(launchPkg, currentUser)
+                    android.util.Log.e("DEBUG_INTENT", "Launch result: $res")
+                } catch (t: Throwable) {
+                    android.util.Log.e("DEBUG_INTENT", "Launch exception", t)
+                }
+            }.start()
+        }
+
+        val uninstallPkg = intent?.getStringExtra("test_uninstall")
+        if (!uninstallPkg.isNullOrEmpty()) {
+            Thread {
+                try {
+                    android.util.Log.e("DEBUG_INTENT", "Starting test uninstall for $uninstallPkg, user: $currentUser")
+                    BlackBoxCore.get().uninstallPackageAsUser(uninstallPkg, currentUser)
+                    val installed = BlackBoxCore.get().isInstalled(uninstallPkg, currentUser)
+                    android.util.Log.e("DEBUG_INTENT", "Uninstall finished, isInstalled=$installed")
+                    runOnUiThread {
+                        refreshHomeAndApps()
+                    }
+                } catch (t: Throwable) {
+                    android.util.Log.e("DEBUG_INTENT", "Uninstall exception", t)
+                }
+            }.start()
+        }
+
+        val tabIndex = intent?.getIntExtra("test_tab", -1) ?: -1
+        if (tabIndex in 0..3) {
+            runOnUiThread {
+                switchToTab(tabIndex)
+            }
+        }
     }
 
     override fun onResume() {
