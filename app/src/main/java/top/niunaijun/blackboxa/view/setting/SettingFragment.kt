@@ -1,4 +1,4 @@
-﻿package top.niunaijun.blackboxa.view.setting
+package top.niunaijun.blackboxa.view.setting
 
 import android.content.Intent
 import android.os.Bundle
@@ -28,11 +28,6 @@ class SettingFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.setting, rootKey)
 
-        findPreference<Preference>("check_update")?.setOnPreferenceClickListener {
-            activity?.let { act -> top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(act, manual = true) }
-            true
-        }
-
         findPreference<Preference>("crash_report")?.setOnPreferenceClickListener {
             val intent = Intent(requireActivity(), CrashReportActivity::class.java)
             requireContext().startActivity(intent)
@@ -46,7 +41,7 @@ class SettingFragment : PreferenceFragmentCompat() {
             BlackBoxCore.get().isXPEnable = (newValue == true)
             true
         }
-        //xpæ¨¡å—è·³è½¬
+        //xp模块跳转
         xpModule = findPreference("xp_module")!!
         xpModule.setOnPreferenceClickListener {
             val intent = Intent(requireActivity(), XpActivity::class.java)
