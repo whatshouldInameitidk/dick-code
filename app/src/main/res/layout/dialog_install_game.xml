@@ -23,11 +23,6 @@
                 android:contentDescription="Game icon"
                 android:padding="2dp" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@drawable/bg_install_game_icon_border"
-                android:importantForAccessibility="no" />
         </FrameLayout>
 
         <LinearLayout
