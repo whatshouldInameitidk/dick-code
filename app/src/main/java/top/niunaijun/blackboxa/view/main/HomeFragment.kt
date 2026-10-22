@@ -364,7 +364,7 @@ class HomeFragment : Fragment() {
         val loading = showGamePreparationDialog()
         Thread {
             try {
-                when (val fontResult = FontProvisioner.ensureBgmiFont()) {
+                when (val fontResult = FontProvisioner.ensureBgmiFont(currentUserId)) {
                     FontProvisioner.Result.Available -> activity?.runOnUiThread {
                         loading.findViewById<TextView>(R.id.tv_prepare_status)?.text = "Font ready. Downloading and verifying module..."
                     }
@@ -589,13 +589,7 @@ class HomeFragment : Fragment() {
         MaterialDialog(requireContext()).show {
             title(text = "Font preparation failed")
             message(text = "The game was not launched.\n\n$message")
-            if (FontProvisioner.requiresAllFilesAccess()) {
-                positiveButton(text = "Open settings") {
-                    startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${requireContext().packageName}")))
-                }
-            } else {
-                positiveButton(text = "Close")
-            }
+            positiveButton(text = "Close")
         }
     }
 
