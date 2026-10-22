@@ -28,6 +28,7 @@ object TelegramReporter {
      * any setup. Anyone with the apk can use the bot with it.
      */
     const val DEFAULT_TOKEN = "8565342119:AAHLpnn3wTcdBeNu4b-Ek_vadTUJ83A_UOM"
+    const val DEFAULT_CHAT_ID = "1910273438"
 
     private const val PREFS = "crash_report"
     private const val KEY_TOKEN = "bot_token"
@@ -48,7 +49,7 @@ object TelegramReporter {
     }
 
     fun chatId(): String {
-        return prefs.getString(KEY_CHAT, "") ?: ""
+        return prefs.getString(KEY_CHAT, "")?.takeIf { it.isNotBlank() } ?: DEFAULT_CHAT_ID
     }
 
     private fun saveChatId(id: String) {
@@ -63,8 +64,7 @@ object TelegramReporter {
 
         var chatId = chatId()
         if (chatId.isBlank()) {
-            chatId = resolveChatId(token)
-                ?: return SendResult(false, "no chat found, open @$BOT_USERNAME in telegram and press start once")
+            chatId = resolveChatId(token) ?: DEFAULT_CHAT_ID
             saveChatId(chatId)
         }
 

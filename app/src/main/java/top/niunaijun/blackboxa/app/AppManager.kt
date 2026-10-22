@@ -39,7 +39,14 @@ object AppManager {
         CrashRecorder.install()
         BlackBoxCore.get().setExceptionHandler { thread, throwable ->
             CrashRecorder.record(thread, throwable)
+            top.niunaijun.blackboxa.util.AutoCrashReporter.onCrash(thread, throwable, "Virtual App / Game Crash", syncWait = true)
         }
+        BlackBoxCore.get().addProcessDeathListener { record, isManual ->
+            if (!isManual) {
+                top.niunaijun.blackboxa.util.AutoCrashReporter.onProcessDied(record.processName, record.packageName, record.pid)
+            }
+        }
+        top.niunaijun.blackboxa.util.AutoCrashReporter.checkAndSendPending(context)
     }
 
     private fun initThirdService(context: Context) {}

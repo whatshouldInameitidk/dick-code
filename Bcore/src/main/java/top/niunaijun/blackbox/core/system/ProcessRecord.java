@@ -57,7 +57,10 @@ public class ProcessRecord extends Binder {
         return config;
     }
 
+    public volatile boolean isKilledManually = false;
+
     public void kill() {
+        isKilledManually = true;
         if (pid > 0) {
             try {
                 Process.killProcess(pid);

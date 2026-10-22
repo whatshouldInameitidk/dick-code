@@ -198,6 +198,7 @@ public class BProcessManagerService implements ISystemService {
 
     public void onProcessDie(ProcessRecord record) {
         synchronized (mProcessLock) {
+            boolean wasManual = record.isKilledManually;
             record.kill();
             Map<String, ProcessRecord> process = mProcessMap.get(record.buid);
             if (process != null) {
@@ -210,6 +211,7 @@ public class BProcessManagerService implements ISystemService {
 
             removeProc(record);
             BNotificationManagerService.get().deletePackageNotification(record.getPackageName(), record.userId);
+            BlackBoxCore.get().notifyProcessDied(record, wasManual);
         }
     }
 

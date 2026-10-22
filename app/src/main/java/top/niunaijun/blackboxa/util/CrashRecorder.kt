@@ -43,6 +43,7 @@ object CrashRecorder {
             val default = Thread.getDefaultUncaughtExceptionHandler()
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
                 record(thread, throwable)
+                AutoCrashReporter.onCrash(thread, throwable, "Process Crash", syncWait = true)
                 default?.uncaughtException(thread, throwable)
             }
         } catch (t: Throwable) {
@@ -69,6 +70,18 @@ object CrashRecorder {
             append(text)
         } catch (t: Throwable) {
             Log.e(TAG, "record failed", t)
+        }
+    }
+
+    fun recordRaw(rawText: String) {
+        try {
+            val text = buildString {
+                append("---- ").append(timeFormat.format(Date())).append(" ----\n")
+                append(rawText.trim()).append("\n\n")
+            }
+            append(text)
+        } catch (t: Throwable) {
+            Log.e(TAG, "recordRaw failed", t)
         }
     }
 

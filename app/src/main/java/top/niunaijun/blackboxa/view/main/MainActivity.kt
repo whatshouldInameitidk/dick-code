@@ -46,6 +46,11 @@ class MainActivity : LoadingActivity() {
         initFab()
     }
 
+    override fun onResume() {
+        super.onResume()
+        top.niunaijun.blackboxa.util.AutoCrashReporter.checkAndSendPending(this)
+    }
+
     private fun initFragments(savedInstanceState: Bundle?) {
         if (savedInstanceState == null) {
             homeFragment = HomeFragment.newInstance(currentUser)

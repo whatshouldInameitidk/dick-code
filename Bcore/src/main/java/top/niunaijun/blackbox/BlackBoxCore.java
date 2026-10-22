@@ -40,6 +40,7 @@ import top.niunaijun.blackbox.app.configuration.ClientConfiguration;
 import top.niunaijun.blackbox.core.GmsCore;
 import top.niunaijun.blackbox.core.env.BEnvironment;
 import top.niunaijun.blackbox.core.system.DaemonService;
+import top.niunaijun.blackbox.core.system.ProcessRecord;
 import top.niunaijun.blackbox.core.system.ServiceManager;
 import top.niunaijun.blackbox.core.system.user.BUserHandle;
 import top.niunaijun.blackbox.core.system.user.BUserInfo;
@@ -392,6 +393,40 @@ public class BlackBoxCore extends ClientConfiguration {
 
     public void addAppLifecycleCallback(AppLifecycleCallback appLifecycleCallback) {
         mAppLifecycleCallbacks.add(appLifecycleCallback);
+    }
+
+    public interface ProcessDeathListener {
+        void onProcessDied(ProcessRecord record, boolean isManual);
+    }
+
+    private final List<ProcessDeathListener> mProcessDeathListeners = new ArrayList<>();
+
+    public void addProcessDeathListener(ProcessDeathListener listener) {
+        synchronized (mProcessDeathListeners) {
+            if (!mProcessDeathListeners.contains(listener)) {
+                mProcessDeathListeners.add(listener);
+            }
+        }
+    }
+
+    public void removeProcessDeathListener(ProcessDeathListener listener) {
+        synchronized (mProcessDeathListeners) {
+            mProcessDeathListeners.remove(listener);
+        }
+    }
+
+    public void notifyProcessDied(ProcessRecord record, boolean isManual) {
+        List<ProcessDeathListener> listeners;
+        synchronized (mProcessDeathListeners) {
+            listeners = new ArrayList<>(mProcessDeathListeners);
+        }
+        for (ProcessDeathListener listener : listeners) {
+            try {
+                listener.onProcessDied(record, isManual);
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        }
     }
 
     public boolean isSupportGms() {
