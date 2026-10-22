@@ -282,7 +282,7 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
         IBinder token;
         if (BuildCompat.isPie()) {
             intent = readIntent(r);
-            token = readActivityToken(client);
+            token = readActivityToken(client, r);
         } else {
             ActivityThreadActivityClientRecordContext clientRecordContext = BRActivityThreadActivityClientRecord.get(r);
             intent = clientRecordContext.intent();
@@ -294,6 +294,9 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
 
         ProxyActivityRecord stubRecord = ProxyActivityRecord.create(intent);
         ActivityInfo activityInfo = stubRecord.mActivityInfo;
+        if (activityInfo != null && activityInfo.applicationInfo != null) {
+            activityInfo.applicationInfo.uid = BlackBoxCore.getHostUid();
+        }
         if (activityInfo != null) {
             if (BActivityThread.getAppConfig() == null) {
                 BlackBoxCore.getBActivityManager().restartProcess(activityInfo.packageName, activityInfo.processName, stubRecord.mUserId);
@@ -384,17 +387,34 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
         return intent instanceof Intent ? (Intent) intent : null;
     }
 
-    private IBinder readActivityToken(Object clientTransaction) {
-        try {
-            IBinder token = BRClientTransaction.get(clientTransaction).mActivityToken();
-            if (token != null) {
-                return token;
-            }
-        } catch (Throwable t) {
-            Slog.w(TAG, "mActivityToken through the bridge failed: " + t);
+    private IBinder readActivityToken(Object clientTransaction, Object launchItem) {
+        if (launchItem != null) {
+            try {
+                Method m = launchItem.getClass().getMethod("getActivityToken");
+                Object t = m.invoke(launchItem);
+                if (t instanceof IBinder) return (IBinder) t;
+            } catch (Throwable ignored) {}
+            Object t = readField(launchItem, "mActivityToken");
+            if (t instanceof IBinder) return (IBinder) t;
+            t = readField(launchItem, "activityToken");
+            if (t instanceof IBinder) return (IBinder) t;
         }
-        Object token = readField(clientTransaction, "mActivityToken");
-        return token instanceof IBinder ? (IBinder) token : null;
+        if (clientTransaction != null) {
+            try {
+                IBinder token = BRClientTransaction.get(clientTransaction).mActivityToken();
+                if (token != null) {
+                    return token;
+                }
+            } catch (Throwable ignored) {}
+            Object token = readField(clientTransaction, "mActivityToken");
+            if (token instanceof IBinder) return (IBinder) token;
+            try {
+                Method m = clientTransaction.getClass().getMethod("getActivityToken");
+                Object t = m.invoke(clientTransaction);
+                if (t instanceof IBinder) return (IBinder) t;
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     /**
@@ -440,15 +460,29 @@ public class HCallbackProxy implements IInjectHook, Handler.Callback {
         }
     }
 
-    private void checkActivityClient() {        try {
-            Object activityClientController = BRActivityClient.get().getActivityClientController();
-            if (!(activityClientController instanceof Proxy)) {
+    private void checkActivityClient() {
+        try {
+            Object activityClientController = null;
+            try {
+                activityClientController = BRActivityClient.get().getActivityClientController();
+            } catch (Throwable ignored) {}
+            if (activityClientController != null && !(activityClientController instanceof Proxy)) {
                 IActivityClientProxy iActivityClientProxy = new IActivityClientProxy(activityClientController);
                 iActivityClientProxy.onlyProxy(true);
                 iActivityClientProxy.injectHook();
-                Object instance = BRActivityClient.get().getInstance();
-                Object o = BRActivityClient.get(instance).INTERFACE_SINGLETON();
-                BRActivityClientActivityClientControllerSingleton.get(o)._set_mKnownInstance(iActivityClientProxy.getProxyInvocation());
+                Object instance = null;
+                try {
+                    instance = BRActivityClient.get().getInstance();
+                } catch (Throwable ignored) {}
+                if (instance != null) {
+                    Object o = null;
+                    try {
+                        o = BRActivityClient.get(instance).INTERFACE_SINGLETON();
+                    } catch (Throwable ignored) {}
+                    if (o != null) {
+                        BRActivityClientActivityClientControllerSingleton.get(o)._set_mKnownInstance(iActivityClientProxy.getProxyInvocation());
+                    }
+                }
             }
         } catch (Throwable t) {
             t.printStackTrace();

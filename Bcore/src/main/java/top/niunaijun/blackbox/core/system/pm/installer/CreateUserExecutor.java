@@ -31,6 +31,8 @@ public class CreateUserExecutor implements Executor {
         FileUtils.mkdirs(BEnvironment.getDeDataDir(packageName, userId));
         FileUtils.mkdirs(new File(BEnvironment.getDataDir(packageName, userId), "no_backup"));
         FileUtils.mkdirs(new File(BEnvironment.getDataDir(packageName, userId), "shared_prefs"));
+        FileUtils.mkdirs(BEnvironment.getExternalDataDir(packageName, userId));
+        FileUtils.mkdirs(BEnvironment.getExternalObbDir(packageName, userId));
 
 //        try {
 //            // /data/data/xx/lib -> /data/app/xx/lib

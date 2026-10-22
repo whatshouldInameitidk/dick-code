@@ -2,12 +2,18 @@ package top.niunaijun.blackbox.fake.delegate;
 
 import android.app.Activity;
 import android.app.Application;
+import android.app.Fragment;
 import android.app.Instrumentation;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.PersistableBundle;
+import android.os.UserHandle;
 import android.util.Log;
 
 import java.lang.reflect.Field;
@@ -145,6 +151,111 @@ public final class AppInstrumentation extends BaseInstrumentationDelegate implem
             return super.newActivity(cl, className, intent);
         } catch (ClassNotFoundException e) {
             return mBaseInstrumentation.newActivity(cl, className, intent);
+        }
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder binder, IBinder binder1, Activity activity, Intent intent, int i, Bundle bundle) throws Throwable {
+        if (handleExecStartActivity(intent, binder1, null, i, bundle)) {
+            return null;
+        }
+        return super.execStartActivity(context, binder, binder1, activity, intent, i, bundle);
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder binder, IBinder binder1, String str, Intent intent, int i, Bundle bundle) throws Throwable {
+        if (handleExecStartActivity(intent, binder1, str, i, bundle)) {
+            return null;
+        }
+        return super.execStartActivity(context, binder, binder1, str, intent, i, bundle);
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder binder, IBinder binder1, Fragment fragment, Intent intent, int i) throws Throwable {
+        if (handleExecStartActivity(intent, binder1, null, i, null)) {
+            return null;
+        }
+        return super.execStartActivity(context, binder, binder1, fragment, intent, i);
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder binder, IBinder binder1, Activity activity, Intent intent, int i) throws Throwable {
+        if (handleExecStartActivity(intent, binder1, null, i, null)) {
+            return null;
+        }
+        return super.execStartActivity(context, binder, binder1, activity, intent, i);
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder binder, IBinder binder1, Fragment fragment, Intent intent, int i, Bundle bundle) throws Throwable {
+        if (handleExecStartActivity(intent, binder1, null, i, bundle)) {
+            return null;
+        }
+        return super.execStartActivity(context, binder, binder1, fragment, intent, i, bundle);
+    }
+
+    @Override
+    public ActivityResult execStartActivity(Context context, IBinder iBinder, IBinder iBinder2, Activity activity, Intent intent, int i, Bundle bundle, UserHandle userHandle) throws Throwable {
+        if (handleExecStartActivity(intent, iBinder2, null, i, bundle)) {
+            return null;
+        }
+        return super.execStartActivity(context, iBinder, iBinder2, activity, intent, i, bundle, userHandle);
+    }
+
+    private boolean handleExecStartActivity(Intent intent, IBinder token, String resultWho, int requestCode, Bundle options) {
+        if (intent == null) {
+            return false;
+        }
+
+        // Don't intercept if intent is already targeting our own ProxyActivity stub
+        ComponentName component = intent.getComponent();
+        if (component != null && component.getPackageName().equals(BlackBoxCore.getHostPkg())) {
+            return false;
+        }
+
+        int userId = BActivityThread.getUserId();
+        ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                intent,
+                PackageManager.GET_META_DATA,
+                null,
+                userId);
+        if (resolveInfo == null) {
+            String origPackage = intent.getPackage();
+            if (intent.getPackage() == null && intent.getComponent() == null) {
+                intent.setPackage(BActivityThread.getAppPackageName());
+            }
+            resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(
+                    intent,
+                    PackageManager.GET_META_DATA,
+                    null,
+                    userId);
+            if (resolveInfo == null) {
+                intent.setPackage(origPackage);
+                return false;
+            }
+        }
+
+        ClassLoader cl = BActivityThread.getApplication() != null
+                ? BActivityThread.getApplication().getClassLoader()
+                : getClass().getClassLoader();
+        intent.setExtrasClassLoader(cl);
+        intent.setComponent(new ComponentName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name));
+
+        Log.d(TAG, "execStartActivity intercepted container activity: " + resolveInfo.activityInfo.name);
+        try {
+            BlackBoxCore.getBActivityManager().startActivityAms(
+                    userId,
+                    intent,
+                    null,
+                    token,
+                    resultWho,
+                    requestCode,
+                    0,
+                    options);
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "execStartActivity failed to route to BlackBox AMS", t);
+            return false;
         }
     }
 }

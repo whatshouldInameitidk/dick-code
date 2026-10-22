@@ -72,16 +72,44 @@ public class ContentProviderDelegate {
         ArrayMap<Object, Object> map = (ArrayMap<Object, Object>) BRActivityThread.get(activityThread).mProviderMap();
 
         for (Object value : map.values()) {
-            String[] mNames = BRActivityThreadProviderClientRecordP.get(value).mNames();
-            if (mNames == null || mNames.length <= 0) {
+            IInterface iInterface = null;
+            try {
+                iInterface = BRActivityThreadProviderClientRecordP.get(value).mProvider();
+            } catch (Throwable ignored) {
+                try {
+                    java.lang.reflect.Field f = value.getClass().getDeclaredField("mProvider");
+                    f.setAccessible(true);
+                    iInterface = (IInterface) f.get(value);
+                } catch (Throwable ignored2) {}
+            }
+            if (iInterface == null || iInterface instanceof Proxy) {
                 continue;
             }
-            String providerName = mNames[0];
-            if (!sInjected.contains(providerName)) {
+
+            String providerName = null;
+            try {
+                String[] mNames = BRActivityThreadProviderClientRecordP.get(value).mNames();
+                if (mNames != null && mNames.length > 0) {
+                    providerName = mNames[0];
+                }
+            } catch (Throwable ignored) {}
+
+            if (providerName != null && sInjected.contains(providerName)) {
+                continue;
+            }
+            if (providerName != null) {
                 sInjected.add(providerName);
-                final IInterface iInterface = BRActivityThreadProviderClientRecordP.get(value).mProvider();
-                BRActivityThreadProviderClientRecordP.get(value)._set_mProvider(new ContentProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg()));
-                BRActivityThreadProviderClientRecordP.get(value)._set_mNames(new String[]{providerName});
+            }
+
+            IInterface wrapped = new SystemProviderStub().wrapper(iInterface, BlackBoxCore.getHostPkg());
+            try {
+                BRActivityThreadProviderClientRecordP.get(value)._set_mProvider(wrapped);
+            } catch (Throwable ignored) {
+                try {
+                    java.lang.reflect.Field f = value.getClass().getDeclaredField("mProvider");
+                    f.setAccessible(true);
+                    f.set(value, wrapped);
+                } catch (Throwable ignored2) {}
             }
         }
     }

@@ -322,6 +322,12 @@ public class ActivityStack {
                     resolvedType, resultTo, resultWho, requestCode, flags, null, options);
         } catch (Throwable e) {
             e.printStackTrace();
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                BlackBoxCore.getContext().startActivity(intent);
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
         }
         return 0;
     }
@@ -350,14 +356,22 @@ public class ActivityStack {
                 id = activityInfo.applicationInfo.theme;
             }
             assert resources != null;
-            typedArray = resources.newTheme().obtainStyledAttributes(id, BRRstyleable.get().Window());
-            boolean windowIsTranslucent = typedArray.getBoolean(BRRstyleable.get().Window_windowIsTranslucent(), false);
-            if (windowIsTranslucent) {
-                shadow.setComponent(new ComponentName(BlackBoxCore.getHostPkg(), ProxyManifest.TransparentProxyActivity(vpid)));
+            int[] styleableWindow = null;
+            try {
+                styleableWindow = BRRstyleable.get().Window();
+            } catch (Throwable ignored) {}
+            if (styleableWindow != null) {
+                typedArray = resources.newTheme().obtainStyledAttributes(id, styleableWindow);
+                boolean windowIsTranslucent = typedArray.getBoolean(BRRstyleable.get().Window_windowIsTranslucent(), false);
+                if (windowIsTranslucent) {
+                    shadow.setComponent(new ComponentName(BlackBoxCore.getHostPkg(), ProxyManifest.TransparentProxyActivity(vpid)));
+                } else {
+                    shadow.setComponent(new ComponentName(BlackBoxCore.getHostPkg(), ProxyManifest.getProxyActivity(vpid)));
+                }
+                Slog.d(TAG, activityInfo + ", windowIsTranslucent: " + windowIsTranslucent);
             } else {
                 shadow.setComponent(new ComponentName(BlackBoxCore.getHostPkg(), ProxyManifest.getProxyActivity(vpid)));
             }
-            Slog.d(TAG, activityInfo + ", windowIsTranslucent: " + windowIsTranslucent);
         } catch (Throwable e) {
             e.printStackTrace();
             shadow.setComponent(new ComponentName(BlackBoxCore.getHostPkg(), ProxyManifest.getProxyActivity(vpid)));

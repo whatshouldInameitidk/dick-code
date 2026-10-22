@@ -140,7 +140,7 @@ public class BlackBoxCore extends ClientConfiguration {
         }
         // the hidden api of the framework is blocked for the app without the exemption,
         // the old dex trick of the library is dead on android 14 and later
-        boolean exempt = HiddenApiCompat.exemptAll();
+        boolean exempt = HiddenApiCompat.exemptAll(context);
         try {
             Reflection.unseal(context);
         } catch (Throwable t) {

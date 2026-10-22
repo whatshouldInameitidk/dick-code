@@ -24,14 +24,47 @@ public class ContextCompat {
     public static final String TAG = "ContextCompat";
 
     public static void fixAttributionSourceState(Object obj, int uid) {
-        Object mAttributionSourceState;
-        if (obj != null && BRAttributionSource.get(obj)._check_mAttributionSourceState() != null) {
-            mAttributionSourceState = BRAttributionSource.get(obj).mAttributionSourceState();
+        if (obj == null) return;
+        boolean fixed = false;
+        try {
+            if (BRAttributionSource.get(obj)._check_mAttributionSourceState() != null) {
+                Object mAttributionSourceState = BRAttributionSource.get(obj).mAttributionSourceState();
+                if (mAttributionSourceState != null) {
+                    AttributionSourceStateContext attributionSourceStateContext = BRAttributionSourceState.get(mAttributionSourceState);
+                    attributionSourceStateContext._set_packageName(BlackBoxCore.getHostPkg());
+                    attributionSourceStateContext._set_uid(uid);
+                    fixed = true;
+                }
+            }
+        } catch (Throwable ignored) {}
 
-            AttributionSourceStateContext attributionSourceStateContext = BRAttributionSourceState.get(mAttributionSourceState);
-            attributionSourceStateContext._set_packageName(BlackBoxCore.getHostPkg());
-            attributionSourceStateContext._set_uid(uid);
+        if (!fixed) {
+            try {
+                java.lang.reflect.Field stateField = obj.getClass().getDeclaredField("mAttributionSourceState");
+                stateField.setAccessible(true);
+                Object state = stateField.get(obj);
+                if (state != null) {
+                    java.lang.reflect.Field uidField = state.getClass().getDeclaredField("uid");
+                    uidField.setAccessible(true);
+                    uidField.setInt(state, uid);
+
+                    java.lang.reflect.Field pkgField = state.getClass().getDeclaredField("packageName");
+                    pkgField.setAccessible(true);
+                    pkgField.set(state, BlackBoxCore.getHostPkg());
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        try {
             fixAttributionSourceState(BRAttributionSource.get(obj).getNext(), uid);
+        } catch (Throwable ignored) {
+            try {
+                java.lang.reflect.Method getNextMethod = obj.getClass().getMethod("getNext");
+                Object next = getNextMethod.invoke(obj);
+                if (next != null && next != obj) {
+                    fixAttributionSourceState(next, uid);
+                }
+            } catch (Throwable ignored2) {}
         }
     }
 
@@ -57,7 +90,18 @@ public class ContextCompat {
             BRContentResolver.get(context.getContentResolver())._set_mPackageName(BlackBoxCore.getHostPkg());
 
             if (BuildCompat.isS()) {
-                fixAttributionSourceState(BRContextImpl.get(context).getAttributionSource(), BActivityThread.getBUid());
+                Object attributionSource = null;
+                try {
+                    attributionSource = BRContextImpl.get(context).getAttributionSource();
+                } catch (Throwable ignored) {
+                    try {
+                        java.lang.reflect.Method m = context.getClass().getMethod("getAttributionSource");
+                        attributionSource = m.invoke(context);
+                    } catch (Throwable ignored2) {}
+                }
+                if (attributionSource != null) {
+                    fixAttributionSourceState(attributionSource, BlackBoxCore.getHostUid());
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();

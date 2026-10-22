@@ -53,13 +53,35 @@ public class SystemProviderStub extends ClassInvocationStub implements BContentP
             return method.invoke(mBase, args);
         }
         if (args != null && args.length > 0) {
-            Object arg = args[0];
-            if (arg instanceof String) {
-                args[0] = BlackBoxCore.getHostPkg();
-            } else if (arg.getClass().getName().equals(BRAttributionSource.getRealClass().getName())) {
-                ContextCompat.fixAttributionSourceState(arg, BlackBoxCore.getHostUid());
+            for (int i = 0; i < args.length; i++) {
+                Object arg = args[i];
+                if (arg == null) continue;
+                if (arg instanceof String && i == 0) {
+                    args[0] = BlackBoxCore.getHostPkg();
+                } else if (arg instanceof android.content.AttributionSource
+                        || arg.getClass().getName().equals("android.content.AttributionSource")
+                        || (BRAttributionSource.getRealClass() != null && arg.getClass().getName().equals(BRAttributionSource.getRealClass().getName()))) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        try {
+                            args[i] = new android.content.AttributionSource.Builder(BlackBoxCore.getHostUid())
+                                    .setPackageName(BlackBoxCore.getHostPkg())
+                                    .build();
+                        } catch (Throwable t) {
+                            ContextCompat.fixAttributionSourceState(arg, BlackBoxCore.getHostUid());
+                        }
+                    } else {
+                        ContextCompat.fixAttributionSourceState(arg, BlackBoxCore.getHostUid());
+                    }
+                }
             }
         }
-        return method.invoke(mBase, args);
+        try {
+            return method.invoke(mBase, args);
+        } catch (Throwable e) {
+            if (e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null) {
+                throw e.getCause();
+            }
+            throw e;
+        }
     }
 }

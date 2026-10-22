@@ -312,6 +312,9 @@ public class BActivityThread extends IBActivityThread.Stub {
         // The guest must not see the container paths, the IO layer maps the native ones
         // back to the container side.
         ApplicationInfo applicationInfo = PackageManagerCompat.toNativeView(packageInfo.applicationInfo, BActivityThread.getUserId());
+        if (applicationInfo != null) {
+            applicationInfo.uid = BlackBoxCore.getHostUid();
+        }
         if (applicationInfo != null && applicationInfo.dataDir != null) {
             File dataDir = new File(applicationInfo.dataDir);
             new File(dataDir, "files").mkdirs();

@@ -51,8 +51,29 @@ public class CopyExecutor implements Executor {
                 return -1;
             }
         } else if (option.isFlag(InstallOption.FLAG_SYSTEM)) {
-            // 系统安装
+            // 系统应用安装
         }
+
+        // Auto-sync OBB if accessible on host
+        try {
+            File hostObbDir = new File(android.os.Environment.getExternalStorageDirectory(), "Android/obb/" + ps.pkg.packageName);
+            if (hostObbDir.exists() && hostObbDir.canRead()) {
+                File[] obbFiles = hostObbDir.listFiles();
+                if (obbFiles != null && obbFiles.length > 0) {
+                    File targetObbDir = BEnvironment.getExternalObbDir(ps.pkg.packageName, userId);
+                    FileUtils.mkdirs(targetObbDir);
+                    for (File f : obbFiles) {
+                        if (f.isFile() && f.getName().endsWith(".obb")) {
+                            File targetFile = new File(targetObbDir, f.getName());
+                            if (!targetFile.exists() || targetFile.length() != f.length()) {
+                                FileUtils.copyFile(f, targetFile);
+                                targetFile.setReadable(true, false);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
         return 0;
     }
 }

@@ -21,9 +21,11 @@ import top.niunaijun.blackboxa.R
 import top.niunaijun.blackboxa.app.AppManager
 import top.niunaijun.blackboxa.bean.AppInfo
 import top.niunaijun.blackboxa.databinding.FragmentHomeBinding
+import top.niunaijun.blackboxa.util.ObbManager
 import top.niunaijun.blackboxa.util.ShortcutUtil
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
+import java.io.File
 
 class HomeFragment : Fragment() {
 
@@ -42,6 +44,10 @@ class HomeFragment : Fragment() {
         uri?.let { installApkUri(it) }
     }
 
+    private val selectObbLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        uri?.let { handleSelectedObbUri(it) }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -52,17 +58,7 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        initListeners()
-        val ver = try {
-            requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName ?: "1.0.0"
-        } catch (e: Exception) {
-            "1.0.0"
-        }
-        viewBinding.tvAppTitle.text = "InvernessLoader"
-        viewBinding.tvAppVersion.text = "v$ver"
-        viewBinding.tvAppVersion.setOnClickListener {
-            activity?.let { act -> top.niunaijun.blackboxa.util.AppUpdater.checkForUpdate(act, manual = true) }
-        }
+        initClicks()
         updateUI()
     }
 
@@ -71,14 +67,9 @@ class HomeFragment : Fragment() {
         updateUI()
     }
 
-    private fun initListeners() {
+    private fun initClicks() {
         viewBinding.btnUserChip.setOnClickListener {
             showUserSelectorDialog()
-        }
-
-        viewBinding.btnSearch.setOnClickListener {
-            val mainActivity = activity as? MainActivity
-            mainActivity?.switchToTab(1) // Switch to Apps tab
         }
 
         viewBinding.btnLaunchGame.setOnClickListener {
@@ -93,8 +84,13 @@ class HomeFragment : Fragment() {
             checkAndPromptGameInstall()
         }
 
-        viewBinding.btnGameMenu.setOnClickListener { v ->
-            showGameMenu(v)
+        viewBinding.btnGameMenu.setOnClickListener { anchor ->
+            showGameMenu(anchor)
+        }
+
+        viewBinding.cardBgmi.setOnLongClickListener {
+            showGameMenu(viewBinding.btnGameMenu)
+            true
         }
     }
 
@@ -141,10 +137,21 @@ class HomeFragment : Fragment() {
             }
 
             viewBinding.tvGameTitle.text = appLabel
-            val statusText = if (versionName.isNotEmpty()) "Installed • $versionName" else "Installed"
-            viewBinding.tvGameStatus.text = statusText
-            viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
-            viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
+
+            val hasObb = ObbManager.isObbInstalled(bgmiPackageName, currentUserId)
+            if (hasObb) {
+                val obbFile = ObbManager.getPrimaryObbFile(bgmiPackageName, currentUserId)
+                val obbSizeStr = if (obbFile != null) " (${ObbManager.formatFileSize(obbFile.length())})" else ""
+                val statusText = if (versionName.isNotEmpty()) "Installed • $versionName$obbSizeStr" else "Installed$obbSizeStr"
+                viewBinding.tvGameStatus.text = statusText
+                viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
+                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
+            } else {
+                val statusText = if (versionName.isNotEmpty()) "Installed • $versionName (OBB Missing)" else "Installed (OBB Missing)"
+                viewBinding.tvGameStatus.text = statusText
+                viewBinding.tvGameStatus.setTextColor(Color.parseColor("#FFB300"))
+                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFB300"))
+            }
 
             viewBinding.layoutInstalledActions.visibility = View.VISIBLE
             viewBinding.layoutNotInstalledActions.visibility = View.GONE
@@ -215,6 +222,18 @@ class HomeFragment : Fragment() {
                 val installResult = blackBoxCore.installPackageAsUser(bgmiPackageName, currentUserId)
                 val isInstalled = blackBoxCore.isInstalled(bgmiPackageName, currentUserId)
 
+                // Try auto-syncing OBB files if discovered
+                val hostObbs = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
+                if (hostObbs.isNotEmpty() && !ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
+                    val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
+                    for (obb in hostObbs) {
+                        val target = File(targetDir, obb.name)
+                        if (!target.exists() || target.length() != obb.length()) {
+                            ObbManager.copyFileWithProgress(obb, target)
+                        }
+                    }
+                }
+
                 activity?.runOnUiThread {
                     loading.dismiss()
                     if (installResult.success && isInstalled) {
@@ -277,11 +296,169 @@ class HomeFragment : Fragment() {
     }
 
     private fun launchBgmi() {
+        if (!ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
+            val candidates = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
+            if (candidates.isNotEmpty()) {
+                promptAutoCopyObbAndLaunch(candidates.first())
+                return
+            }
+            showObbMissingDialog()
+            return
+        }
+        performDirectLaunch()
+    }
+
+    private fun performDirectLaunch() {
         try {
             toast("Launching BGMI...")
             BlackBoxCore.get().launchApk(bgmiPackageName, currentUserId)
         } catch (t: Throwable) {
             toast("Failed to launch: ${t.message}")
+        }
+    }
+
+    private fun promptAutoCopyObbAndLaunch(sourceFile: File) {
+        val sizeStr = ObbManager.formatFileSize(sourceFile.length())
+        MaterialDialog(requireContext()).show {
+            title(text = "Game Data (OBB) Detected")
+            message(text = "Found OBB game file:\n${sourceFile.name} ($sizeStr)\n\nWould you like to install it into Inverness virtual space now?")
+            positiveButton(text = "Install & Launch") {
+                copyObbFileAndLaunch(sourceFile)
+            }
+            neutralButton(text = "Select Another") {
+                openObbPicker()
+            }
+            negativeButton(res = R.string.cancel)
+        }
+    }
+
+    private fun showObbMissingDialog() {
+        MaterialDialog(requireContext()).show {
+            title(text = "Game Data (OBB) Required")
+            message(text = "BATTLEGROUNDS MOBILE INDIA requires its OBB data file to start.\n\nOn Samsung & Android 14+ devices, system OBB folders are protected.\n\nHow to fix:\n• Tap 'Select OBB File' to choose your main.xxxx.com.pubg.imobile.obb file from Downloads or Storage.\n• Or use Samsung 'My Files' to copy the OBB file into your Download folder, then tap 'Auto-Scan'.")
+            positiveButton(text = "Select OBB File") {
+                openObbPicker()
+            }
+            neutralButton(text = "Auto-Scan") {
+                scanAndNotifyObb()
+            }
+            negativeButton(text = "Launch Anyway") {
+                performDirectLaunch()
+            }
+        }
+    }
+
+    private fun openObbPicker() {
+        try {
+            selectObbLauncher.launch(arrayOf("*/*"))
+        } catch (t: Throwable) {
+            toast("Unable to open file picker: ${t.localizedMessage}")
+        }
+    }
+
+    private fun handleSelectedObbUri(uri: Uri) {
+        val fileName = ObbManager.getUriFileName(requireContext(), uri, bgmiPackageName)
+        val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
+        val targetFile = File(targetDir, fileName)
+
+        val loading = MaterialDialog(requireContext()).apply {
+            title(text = "Installing OBB Data")
+            message(text = "Copying $fileName into virtual space... Please wait.")
+            cancelable(false)
+            show()
+        }
+
+        Thread {
+            val success = ObbManager.copyUriWithProgress(requireContext(), uri, targetFile) { percent, copied, total ->
+                activity?.runOnUiThread {
+                    val progressMsg = if (total > 0) {
+                        "Copying $fileName: $percent% (${ObbManager.formatFileSize(copied)} / ${ObbManager.formatFileSize(total)})"
+                    } else {
+                        "Copying $fileName: ${ObbManager.formatFileSize(copied)}..."
+                    }
+                    loading.message(text = progressMsg)
+                }
+            }
+
+            activity?.runOnUiThread {
+                loading.dismiss()
+                if (success) {
+                    toast("OBB installed successfully!")
+                    updateUI()
+                    performDirectLaunch()
+                } else {
+                    toast("Failed to copy OBB file. Please check storage space.")
+                }
+            }
+        }.start()
+    }
+
+    private fun copyObbFileAndLaunch(sourceFile: File) {
+        val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
+        val targetFile = File(targetDir, sourceFile.name)
+
+        val loading = MaterialDialog(requireContext()).apply {
+            title(text = "Installing OBB Data")
+            message(text = "Copying ${sourceFile.name}... Please wait.")
+            cancelable(false)
+            show()
+        }
+
+        Thread {
+            val success = ObbManager.copyFileWithProgress(sourceFile, targetFile) { percent, copied, total ->
+                activity?.runOnUiThread {
+                    loading.message(text = "Copying ${sourceFile.name}: $percent% (${ObbManager.formatFileSize(copied)} / ${ObbManager.formatFileSize(total)})")
+                }
+            }
+
+            activity?.runOnUiThread {
+                loading.dismiss()
+                if (success) {
+                    toast("OBB installed successfully!")
+                    updateUI()
+                    performDirectLaunch()
+                } else {
+                    toast("Failed to copy OBB file.")
+                }
+            }
+        }.start()
+    }
+
+    private fun showManageObbDialog() {
+        val installedFiles = ObbManager.getInstalledObbFiles(bgmiPackageName, currentUserId)
+        val statusMsg = if (installedFiles.isNotEmpty()) {
+            val details = installedFiles.joinToString("\n") { "• ${it.name} (${ObbManager.formatFileSize(it.length())})" }
+            "OBB Status: Installed\n\nActive files in virtual space:\n$details"
+        } else {
+            "OBB Status: Missing (Game will hang on 0MB / 0MB download screen)\n\nNo OBB files found in virtual storage."
+        }
+
+        MaterialDialog(requireContext()).show {
+            title(text = "Manage OBB Game Data")
+            message(text = statusMsg)
+            positiveButton(text = "Select OBB File") {
+                openObbPicker()
+            }
+            neutralButton(text = "Auto-Scan Storage") {
+                scanAndNotifyObb()
+            }
+            negativeButton(res = R.string.cancel)
+        }
+    }
+
+    private fun scanAndNotifyObb() {
+        val found = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
+        if (found.isNotEmpty()) {
+            promptAutoCopyObbAndLaunch(found.first())
+        } else {
+            MaterialDialog(requireContext()).show {
+                title(text = "No OBB Files Found")
+                message(text = "Could not find any OBB file for $bgmiPackageName in Downloads or storage.\n\nPlease copy your OBB file into your 'Download' folder or tap 'Select OBB File' to browse manually.")
+                positiveButton(text = "Select OBB File") {
+                    openObbPicker()
+                }
+                negativeButton(res = R.string.cancel)
+            }
         }
     }
 
@@ -314,9 +491,10 @@ class HomeFragment : Fragment() {
 
         if (isInstalled) {
             popup.menu.add(0, 1, 0, "Launch Game")
-            popup.menu.add(0, 2, 1, "Create Shortcut")
-            popup.menu.add(0, 3, 2, "Clear Data")
-            popup.menu.add(0, 4, 3, "Uninstall")
+            popup.menu.add(0, 6, 1, "Manage OBB Data")
+            popup.menu.add(0, 2, 2, "Create Shortcut")
+            popup.menu.add(0, 3, 3, "Clear Data")
+            popup.menu.add(0, 4, 4, "Uninstall")
         } else {
             popup.menu.add(0, 5, 0, "Install from Device")
         }
@@ -324,6 +502,7 @@ class HomeFragment : Fragment() {
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> launchBgmi()
+                6 -> showManageObbDialog()
                 2 -> createBgmiShortcut()
                 3 -> {
                     MaterialDialog(requireContext()).show {
