@@ -19,7 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import top.niunaijun.blackbox.fake.provider.FileProvider
+import androidx.core.content.FileProvider
 import top.niunaijun.blackboxa.R
 import java.io.File
 import java.io.FileOutputStream
@@ -305,7 +305,7 @@ object AppUpdater {
                 }
             }
 
-            val authority = "${activity.packageName}.blackbox.FileProvider"
+            val authority = "${activity.packageName}.update.FileProvider"
             val uri = FileProvider.getUriForFile(activity, authority, apkFile)
 
             val intent = Intent(Intent.ACTION_VIEW).apply {
