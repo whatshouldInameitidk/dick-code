@@ -113,13 +113,17 @@ object AppUpdater {
     private fun fetchRemoteVersion(): String? {
         var connection: HttpURLConnection? = null
         return try {
-            val url = URL(REMOTE_VERSION_URL)
+            val cacheBusterUrl = "$REMOTE_VERSION_URL?t=${System.currentTimeMillis()}"
+            val url = URL(cacheBusterUrl)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 8000
             connection.readTimeout = 8000
+            connection.useCaches = false
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+            connection.setRequestProperty("Pragma", "no-cache")
             connection.instanceFollowRedirects = true
-            connection.setRequestProperty("User-Agent", "InvernessLoader/1.0.0")
+            connection.setRequestProperty("User-Agent", "InvernessLoader")
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 connection.inputStream.bufferedReader().use { it.readText().trim() }
@@ -158,7 +162,7 @@ object AppUpdater {
         val btnUpdateNow = dialog.findViewById<Button>(R.id.btn_update_now)
         val btnUpdateLater = dialog.findViewById<Button>(R.id.btn_update_later)
 
-        tvVersionInfo.text = "v$currentVersion → v$remoteVersion"
+        tvVersionInfo.text = "v$currentVersion -> v$remoteVersion"
         tvUpdateMsg.text = "A new version of InvernessLoader (v$remoteVersion) is available with the latest fixes. Tap update to download and install automatically."
 
         btnUpdateLater.setOnClickListener {
@@ -197,7 +201,8 @@ object AppUpdater {
                     apkFile.delete()
                 }
 
-                val url = URL(REMOTE_APK_URL)
+                val cacheBusterApkUrl = "$REMOTE_APK_URL?t=${System.currentTimeMillis()}"
+                val url = URL(cacheBusterApkUrl)
                 connection = openRedirectConnection(url)
 
                 val fileLength = connection.contentLength
@@ -269,7 +274,10 @@ object AppUpdater {
             connection.instanceFollowRedirects = true
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "InvernessLoader/1.0.0")
+            connection.useCaches = false
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+            connection.setRequestProperty("Pragma", "no-cache")
+            connection.setRequestProperty("User-Agent", "InvernessLoader")
 
             val status = connection.responseCode
             if (status == HttpURLConnection.HTTP_MOVED_TEMP ||
