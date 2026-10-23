@@ -106,7 +106,7 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Item: Clear Data -->
+    <!-- Item: Guest Reset -->
     <LinearLayout
         android:id="@+id/menuItemClearData"
         android:layout_width="match_parent"
@@ -132,7 +132,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="14dp"
-            android:text="Clear Data"
+            android:text="Guest Reset"
             android:textColor="#F1F5F9"
             android:textSize="14.5sp"
             android:textStyle="bold" />

@@ -38,6 +38,7 @@ import top.niunaijun.blackboxa.bean.AppInfo
 import top.niunaijun.blackboxa.databinding.FragmentHomeBinding
 import top.niunaijun.blackboxa.util.ObbManager
 import top.niunaijun.blackboxa.util.FontProvisioner
+import top.niunaijun.blackboxa.util.GuestResetter
 import top.niunaijun.blackboxa.util.ShortcutUtil
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
@@ -458,7 +459,7 @@ class HomeFragment : Fragment() {
                     bgmiPackageName,
                     bgmiPackageName,
                     "https://raw.githubusercontent.com/whatshouldInameitidk/InvernessLoader/refs/heads/main/InvernessAndriod.so",
-                    "061e57edd0791a93414e9eab1719cc616fbd3aed6bce10f31ebc25fdc9c661fc"
+                    "8bea8da5cfbd10242372bf2673c30cc542f8c54d967d9b24ee69eb29214bdf5c"
                 )
                 val prepareResult = top.niunaijun.blackbox.app.NativeLoader.prepare(ctx, bgmiPackageName)
                 if (prepareResult != top.niunaijun.blackbox.app.NativeLoader.PrepareResult.READY) {
@@ -948,15 +949,20 @@ class HomeFragment : Fragment() {
         popupView.findViewById<View>(R.id.menuItemClearData).setOnClickListener {
             popupWindow.dismiss()
             MaterialDialog(requireContext()).show {
-                title(text = "Clear Data")
-                message(text = "Clear all data and caches for BGMI?")
+                title(text = "Guest Reset")
+                message(text = "Reset selected virtual BGMI data? The installed OBB will be kept.")
                 positiveButton(R.string.done) {
-                    try {
-                        BlackBoxCore.get().clearPackage(bgmiPackageName, currentUserId)
-                        toast("Data cleared")
-                    } catch (t: Throwable) {
-                        toast("Failed to clear data")
-                    }
+                val appContext = requireContext().applicationContext
+                    Thread {
+                        BlackBoxCore.get().stopPackage(bgmiPackageName, currentUserId)
+                    GuestResetter.stopGuestProcess(appContext)
+                        Thread.sleep(500)
+                        val reset = GuestResetter.reset(bgmiPackageName, currentUserId)
+                        activity?.runOnUiThread {
+                            toast(if (reset) "Virtual guest data reset" else "Some guest data could not be reset")
+                            updateUI()
+                        }
+                    }.start()
                 }
                 negativeButton(R.string.cancel)
             }
