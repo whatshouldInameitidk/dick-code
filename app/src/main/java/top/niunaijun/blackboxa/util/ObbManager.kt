@@ -45,15 +45,86 @@ object ObbManager {
         val candidates = mutableListOf<File>()
         val searchDirs = mutableListOf<File>()
 
-        // 1. Host Android/obb
-        searchDirs.add(File(Environment.getExternalStorageDirectory(), "Android/obb/$packageName"))
-        searchDirs.add(File("/storage/emulated/0/Android/obb/$packageName"))
+        // 1. Collect all possible version codes
+        val versionCodes = mutableSetOf<Int>()
+        try {
+            val pm = context.packageManager
+            val pInfo = pm.getPackageInfo(packageName, 0)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                versionCodes.add(pInfo.longVersionCode.toInt())
+            } else {
+                @Suppress("DEPRECATION")
+                versionCodes.add(pInfo.versionCode)
+            }
+        } catch (t: Throwable) {}
 
-        // 2. Host Download folders (very common for Samsung & web downloads)
+        try {
+            val vInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, 0, 0)
+            vInfo?.versionCode?.let { versionCodes.add(it) }
+        } catch (t: Throwable) {}
+
+        // Common recent BGMI version codes
+        versionCodes.addAll(listOf(21535, 21530, 21525, 21520, 21515, 21510, 21505, 21500, 21325, 21320, 21315, 21310, 21305, 21300, 20700, 20600))
+        android.util.Log.d(TAG, "findHostObbFiles for $packageName, versionCodes=$versionCodes")
+
+        // 2. Direct OBB locations
+        val obbDirs = mutableListOf<File>()
+        obbDirs.add(File(Environment.getExternalStorageDirectory(), "Android/obb/$packageName"))
+        obbDirs.add(File("/storage/emulated/0/Android/obb/$packageName"))
+        obbDirs.add(File("/sdcard/Android/obb/$packageName"))
+        obbDirs.add(File("/storage/emulated/legacy/Android/obb/$packageName"))
+        obbDirs.add(File("/mnt/sdcard/Android/obb/$packageName"))
+
+        try {
+            val extDirs = context.getExternalFilesDirs(null)
+            if (extDirs != null) {
+                for (ed in extDirs) {
+                    if (ed != null) {
+                        val root = ed.parentFile?.parentFile?.parentFile?.parentFile
+                        if (root != null) {
+                            obbDirs.add(File(root, "Android/obb/$packageName"))
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {}
+
+        try {
+            val appObbDirs = context.obbDirs
+            if (appObbDirs != null) {
+                for (d in appObbDirs) {
+                    if (d != null) {
+                        obbDirs.add(File(d.parentFile, packageName))
+                    }
+                }
+            }
+        } catch (t: Throwable) {}
+
+        // 3. Direct probe on obbDirs (bypasses opendir restrictions on Android 11+)
+        for (dir in obbDirs.distinct()) {
+            android.util.Log.d(TAG, "Probing dir: ${dir.absolutePath}, exists=${dir.exists()}, canRead=${dir.canRead()}")
+            for (vc in versionCodes) {
+                val testFiles = listOf(
+                    File(dir, "main.$vc.$packageName.obb"),
+                    File(dir, "patch.$vc.$packageName.obb")
+                )
+                for (f in testFiles) {
+                    if (isDirectFileAccessible(f)) {
+                        android.util.Log.d(TAG, "Direct file probe FOUND OBB: ${f.absolutePath} (${f.length()} bytes)")
+                        candidates.add(f)
+                    }
+                }
+            }
+        }
+
+        // 4. Also scan directories if listFiles() works
+        searchDirs.addAll(obbDirs)
         val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (downloadDir != null) {
             searchDirs.add(downloadDir)
-            downloadDir.listFiles()?.filter { it.isDirectory }?.forEach(searchDirs::add)
+            try {
+                downloadDir.listFiles()?.filter { it.isDirectory }?.forEach(searchDirs::add)
+            } catch (t: Throwable) {}
             searchDirs.add(File(downloadDir, packageName))
             searchDirs.add(File(downloadDir, "obb"))
             searchDirs.add(File(downloadDir, "OBB"))
@@ -61,39 +132,31 @@ object ObbManager {
         searchDirs.add(File("/storage/emulated/0/Download"))
         searchDirs.add(File("/storage/emulated/0/Download/$packageName"))
         searchDirs.add(File("/storage/emulated/0/Downloads"))
-
-        // 3. Documents / Root
+        searchDirs.add(File("/storage/emulated/0/Downloads/$packageName"))
         searchDirs.add(File("/storage/emulated/0/Documents"))
+        searchDirs.add(File("/storage/emulated/0/Documents/$packageName"))
         searchDirs.add(File("/storage/emulated/0/OBB"))
         searchDirs.add(File("/storage/emulated/0/obb"))
         searchDirs.add(File("/storage/emulated/0/Telegram/Telegram Files"))
 
-        // 4. App-specific external directories
-        try {
-            val appObbDirs = context.obbDirs
-            if (appObbDirs != null) {
-                for (d in appObbDirs) {
-                    if (d != null) {
-                        searchDirs.add(d)
-                        searchDirs.add(File(d, packageName))
-                    }
-                }
-            }
-        } catch (t: Throwable) {}
-
         for (dir in searchDirs.distinct()) {
-            if (!dir.exists() || !dir.canRead()) continue
             try {
-                if (dir.isDirectory) {
-                    val files = dir.listFiles() ?: continue
-                    for (file in files) {
-                        if (file.isFile && isValidObbFile(file, packageName)) {
-                            candidates.add(file)
-                        } else if (file.isDirectory && (file.name.equals(packageName, true) || file.name.equals("obb", true))) {
-                            val subFiles = file.listFiles() ?: continue
-                            for (sf in subFiles) {
-                                if (sf.isFile && isValidObbFile(sf, packageName)) {
-                                    candidates.add(sf)
+                if (dir.exists() && dir.isDirectory) {
+                    val files = dir.listFiles()
+                    if (files != null) {
+                        for (file in files) {
+                            if (file.isFile && isValidObbFile(file, packageName)) {
+                                android.util.Log.d(TAG, "Directory scan FOUND OBB: ${file.absolutePath}")
+                                candidates.add(file)
+                            } else if (file.isDirectory && (file.name.equals(packageName, true) || file.name.equals("obb", true) || file.name.equals("OBB", true))) {
+                                val subFiles = file.listFiles()
+                                if (subFiles != null) {
+                                    for (sf in subFiles) {
+                                        if (sf.isFile && isValidObbFile(sf, packageName)) {
+                                            android.util.Log.d(TAG, "Directory subscan FOUND OBB: ${sf.absolutePath}")
+                                            candidates.add(sf)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -102,9 +165,46 @@ object ObbManager {
             } catch (t: Throwable) {}
         }
 
-        return candidates.distinctBy { it.absolutePath }
+        val result = candidates.distinctBy { it.absolutePath }
             .sortedWith(compareByDescending<File> { it.name.startsWith("main.", ignoreCase = true) }
                 .thenByDescending { it.length() })
+        android.util.Log.d(TAG, "findHostObbFiles total candidates: ${result.size}")
+        return result
+    }
+
+    fun findProtectedHostObbFile(context: Context, packageName: String): File? {
+        val versionCodes = linkedSetOf<Int>()
+        try {
+            val info = context.packageManager.getPackageInfo(packageName, 0)
+            versionCodes.add(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) info.longVersionCode.toInt() else info.versionCode)
+        } catch (_: Throwable) {
+        }
+        versionCodes.addAll(listOf(21535, 21530, 21525, 21520, 21515, 21510, 21505, 21500, 21325, 21320, 21315, 21310, 21305, 21300, 20700, 20600))
+
+        val directories = listOf(
+            File(Environment.getExternalStorageDirectory(), "Android/obb/$packageName"),
+            File("/storage/emulated/0/Android/obb/$packageName"),
+            File("/sdcard/Android/obb/$packageName")
+        )
+        return directories.asSequence()
+            .flatMap { directory -> versionCodes.asSequence().flatMap { version -> sequenceOf(File(directory, "main.$version.$packageName.obb"), File(directory, "patch.$version.$packageName.obb")) } }
+            .firstOrNull { it.exists() && it.length() > MIN_OBB_SIZE }
+    }
+
+    private fun isDirectFileAccessible(file: File): Boolean {
+        try {
+            if (!file.exists()) return false
+            if (file.length() <= MIN_OBB_SIZE) return false
+            FileInputStream(file).use { input ->
+                val buf = ByteArray(16)
+                if (input.read(buf) > 0) {
+                    return true
+                }
+            }
+        } catch (t: Throwable) {
+            // Unreadable
+        }
+        return false
     }
 
     private fun isValidObbFile(file: File, packageName: String): Boolean {

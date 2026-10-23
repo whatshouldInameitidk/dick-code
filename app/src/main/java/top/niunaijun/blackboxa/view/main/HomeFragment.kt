@@ -17,6 +17,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
@@ -59,6 +60,13 @@ class HomeFragment : Fragment() {
 
     private val selectObbLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { handleSelectedObbUri(it) }
+    }
+
+    private val getContentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val uri = result.data?.data
+        if (uri != null) {
+            handleSelectedObbUri(uri)
+        }
     }
 
     private val allFilesAccessLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -353,7 +361,8 @@ class HomeFragment : Fragment() {
                 promptAutoCopyObbAndLaunch(candidates.first())
                 return
             }
-            showObbMissingDialog()
+            val protectedFile = ObbManager.findProtectedHostObbFile(requireContext(), bgmiPackageName)
+            showObbMissingDialog(protectedFile)
             return
         }
         performDirectLaunch()
@@ -512,7 +521,7 @@ class HomeFragment : Fragment() {
         dialog.show()
     }
 
-    private fun showObbMissingDialog() {
+    private fun showObbMissingDialog(protectedHostFile: File? = null) {
         val context = context ?: return
         val dialog = Dialog(context)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -534,25 +543,43 @@ class HomeFragment : Fragment() {
         val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
         val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
         val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
+        val tvCancelText = dialogView.findViewById<TextView>(R.id.tvCancelText)
         val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
         val tvSecondaryText = dialogView.findViewById<TextView>(R.id.tvSecondaryText)
 
         tvDialogTitle.text = "Game Data (OBB)"
-        tvDialogSubtitle.text = "Required"
-        tvFileCardLabel.text = "STATUS:"
-        tvFileName.text = "OBB File Not Found"
-        tvFileSize.text = "(Protected storage or not downloaded)"
-        tvQuestionMessage.text = "BGMI requires an OBB file to start.\nSelect OBB file or Auto-Scan if copied."
-        tvPrimaryBtnText.text = "SELECT OBB FILE"
+
+        if (protectedHostFile != null) {
+            tvDialogSubtitle.text = "Detected on Device"
+            tvFileCardLabel.text = "FOUND ORIGINAL OBB:"
+            tvFileName.text = protectedHostFile.name
+            val sizeStr = ObbManager.formatFileSize(protectedHostFile.length())
+            tvFileSize.text = "($sizeStr • In /Android/obb)"
+            tvQuestionMessage.text = "Android protects /Android/obb from direct copy.\nPlease select it using your file manager (ZArchiver / Files) or move it into 'Download', then tap AUTO-SCAN."
+            tvPrimaryBtnText.text = "SELECT WITH FILE MANAGER"
+            tvCancelText.text = "CANCEL"
+            btnDialogCancel.setOnClickListener {
+                dialog.dismiss()
+            }
+        } else {
+            tvDialogSubtitle.text = "Required"
+            tvFileCardLabel.text = "STATUS:"
+            tvFileName.text = "OBB File Not Found"
+            tvFileSize.text = "(Searched storage & Downloads)"
+            tvQuestionMessage.text = "BGMI requires an OBB file to start.\nIf your game has in-app data or no OBB, tap LAUNCH ANYWAY."
+            tvPrimaryBtnText.text = "SELECT OBB FILE"
+            tvCancelText.text = "LAUNCH ANYWAY"
+            btnDialogCancel.setOnClickListener {
+                dialog.dismiss()
+                performDirectLaunch()
+            }
+        }
+
         tvSecondaryText.text = "AUTO-SCAN"
 
         btnPrimaryAction.setOnClickListener {
             dialog.dismiss()
             openObbPicker()
-        }
-
-        btnDialogCancel.setOnClickListener {
-            dialog.dismiss()
         }
 
         btnDialogSecondary.setOnClickListener {
@@ -565,9 +592,27 @@ class HomeFragment : Fragment() {
 
     private fun openObbPicker() {
         try {
-            selectObbLauncher.launch(arrayOf("*/*"))
+            val getContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            val openDocIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                type = "*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload"))
+                }
+            }
+            val chooser = Intent.createChooser(getContentIntent, "Select BGMI OBB File").apply {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(openDocIntent))
+            }
+            getContentLauncher.launch(chooser)
         } catch (t: Throwable) {
-            toast("Unable to open file picker: ${t.localizedMessage}")
+            try {
+                selectObbLauncher.launch(arrayOf("*/*"))
+            } catch (e: Throwable) {
+                toast("Unable to open file picker: ${e.localizedMessage}")
+            }
         }
     }
 
@@ -701,9 +746,17 @@ class HomeFragment : Fragment() {
             tvFileSize.text = "(${ObbManager.formatFileSize(f.length())})"
             tvQuestionMessage.text = "OBB is currently active in Inverness virtual space."
         } else {
-            tvFileName.text = "No OBB installed"
-            tvFileSize.text = "(Game cannot launch without OBB)"
-            tvQuestionMessage.text = "Please select OBB file or tap Auto-Scan."
+            val protectedFile = ObbManager.findProtectedHostObbFile(context, bgmiPackageName)
+            if (protectedFile != null) {
+                tvFileName.text = protectedFile.name
+                val sizeStr = ObbManager.formatFileSize(protectedFile.length())
+                tvFileSize.text = "($sizeStr • Protected on Device)"
+                tvQuestionMessage.text = "Detected in /Android/obb. Tap AUTO-SCAN or SELECT to copy."
+            } else {
+                tvFileName.text = "No OBB installed"
+                tvFileSize.text = "(Game cannot launch without OBB)"
+                tvQuestionMessage.text = "Please select OBB file or tap Auto-Scan."
+            }
         }
 
         tvPrimaryBtnText.text = "SELECT OBB FILE"
@@ -735,48 +788,8 @@ class HomeFragment : Fragment() {
         if (found.isNotEmpty()) {
             promptAutoCopyObbAndLaunch(found.first())
         } else {
-            val context = context ?: return
-            val dialog = Dialog(context)
-            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-            val dialogView = layoutInflater.inflate(R.layout.dialog_obb_detected, null)
-            dialog.setContentView(dialogView)
-
-            dialog.window?.let { window ->
-                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
-                window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-            }
-
-            val tvDialogTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
-            val tvDialogSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogSubtitle)
-            val tvFileCardLabel = dialogView.findViewById<TextView>(R.id.tvFileCardLabel)
-            val tvFileName = dialogView.findViewById<TextView>(R.id.tvFileName)
-            val tvFileSize = dialogView.findViewById<TextView>(R.id.tvFileSize)
-            val tvQuestionMessage = dialogView.findViewById<TextView>(R.id.tvQuestionMessage)
-            val btnPrimaryAction = dialogView.findViewById<LinearLayout>(R.id.btnPrimaryAction)
-            val tvPrimaryBtnText = dialogView.findViewById<TextView>(R.id.tvPrimaryBtnText)
-            val btnDialogCancel = dialogView.findViewById<FrameLayout>(R.id.btnDialogCancel)
-            val btnDialogSecondary = dialogView.findViewById<FrameLayout>(R.id.btnDialogSecondary)
-
-            tvDialogTitle.text = "Game Data (OBB)"
-            tvDialogSubtitle.text = "Not Found"
-            tvFileCardLabel.text = "SCAN RESULT:"
-            tvFileName.text = "No OBB files discovered"
-            tvFileSize.text = "(Searched storage & Downloads)"
-            tvQuestionMessage.text = "Please copy the OBB file into your 'Download' folder or select it manually."
-            tvPrimaryBtnText.text = "SELECT OBB FILE"
-            btnDialogSecondary.visibility = View.GONE
-
-            btnPrimaryAction.setOnClickListener {
-                dialog.dismiss()
-                openObbPicker()
-            }
-
-            btnDialogCancel.setOnClickListener {
-                dialog.dismiss()
-            }
-
-            dialog.show()
+            val protectedFile = ObbManager.findProtectedHostObbFile(requireContext(), bgmiPackageName)
+            showObbMissingDialog(protectedFile)
         }
     }
 
