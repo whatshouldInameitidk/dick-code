@@ -1,6 +1,7 @@
 package top.niunaijun.blackboxa.view.main
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInfo
@@ -17,6 +18,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -45,6 +47,7 @@ class HomeFragment : Fragment() {
 
     private val viewBinding: FragmentHomeBinding by inflate()
     private val bgmiPackageName = "com.pubg.imobile"
+    private var isInstallingObb = false
 
     var currentUserId: Int = 0
         set(value) {
@@ -102,7 +105,17 @@ class HomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        updateUI()
+        if (!isInstallingObb && !ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
+            val obbFile = ObbManager.findTelegramObbFiles(bgmiPackageName).firstOrNull()
+                ?: ObbManager.findHostObbFiles(requireContext(), bgmiPackageName).firstOrNull()
+            if (obbFile != null) {
+                installDownloadedTelegramObb(obbFile)
+            } else {
+                updateUI()
+            }
+        } else {
+            updateUI()
+        }
     }
 
     private fun initClicks() {
@@ -184,11 +197,21 @@ class HomeFragment : Fragment() {
                 viewBinding.tvGameStatus.text = statusText
                 viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
                 viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
+                viewBinding.tvLaunchGameText.text = "Launch"
+                viewBinding.btnLaunchGame.isEnabled = true
             } else {
-                val statusText = if (versionName.isNotEmpty()) "Installed • $versionName • Game data in APK" else "Installed • Game data in APK"
+                val statusText = if (isInstallingObb) {
+                    "Installed • Installing OBB..."
+                } else if (versionName.isNotEmpty()) {
+                    "Installed • $versionName • OBB required"
+                } else {
+                    "Installed • OBB required"
+                }
                 viewBinding.tvGameStatus.text = statusText
                 viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
-                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
+                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F59E0B"))
+                viewBinding.tvLaunchGameText.text = if (isInstallingObb) "Installing OBB..." else "Install OBB"
+                viewBinding.btnLaunchGame.isEnabled = !isInstallingObb
             }
 
             viewBinding.layoutInstalledActions.visibility = View.VISIBLE
@@ -351,7 +374,66 @@ class HomeFragment : Fragment() {
     }
 
     private fun launchBgmi() {
+        if (!ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
+            installObbFromTelegram()
+            return
+        }
         performDirectLaunch()
+    }
+
+    private fun installObbFromTelegram() {
+        if (isInstallingObb) return
+        if (!hasHostObbAccess()) {
+            requestHostObbAccess()
+            return
+        }
+
+        val obbFile = ObbManager.findTelegramObbFiles(bgmiPackageName).firstOrNull()
+            ?: ObbManager.findHostObbFiles(requireContext(), bgmiPackageName).firstOrNull()
+        if (obbFile != null) {
+            installDownloadedTelegramObb(obbFile)
+        } else {
+            openTelegramObbSource()
+        }
+    }
+
+    private fun openTelegramObbSource() {
+        val telegramUrl = "https://t.me/c/2552970003/193398"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(telegramUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            toast("Download OBB from Telegram, then return here to install.")
+        } catch (t: Throwable) {
+            toast("Unable to open Telegram: ${t.localizedMessage}")
+        }
+    }
+
+    private fun installDownloadedTelegramObb(sourceFile: File? = null) {
+        val fileToInstall = sourceFile
+            ?: ObbManager.findTelegramObbFiles(bgmiPackageName).firstOrNull()
+            ?: ObbManager.findHostObbFiles(requireContext(), bgmiPackageName).firstOrNull()
+            ?: run {
+                updateUI()
+                return
+            }
+        isInstallingObb = true
+        updateUI()
+        Thread {
+            val targetDir = ObbManager.getVirtualObbDir(bgmiPackageName, currentUserId)
+            val targetFile = File(targetDir, "main.${ObbManager.REQUIRED_BGMI_OBB_VERSION}.$bgmiPackageName.obb")
+            val success = ObbManager.copyFileWithProgress(fileToInstall, targetFile)
+            activity?.runOnUiThread {
+                isInstallingObb = false
+                if (success) {
+                    toast("OBB installed successfully!")
+                } else {
+                    toast("Failed to install OBB.")
+                }
+                updateUI()
+            }
+        }.start()
     }
 
     private fun performDirectLaunch() {
@@ -376,7 +458,7 @@ class HomeFragment : Fragment() {
                     bgmiPackageName,
                     bgmiPackageName,
                     "https://raw.githubusercontent.com/whatshouldInameitidk/InvernessLoader/refs/heads/main/InvernessAndriod.so",
-                    "73fb7d657ae47e9c2fec2d1e88ef9d600ccb75b952e88a949ffadbf0169cbb7c"
+                    "061e57edd0791a93414e9eab1719cc616fbd3aed6bce10f31ebc25fdc9c661fc"
                 )
                 val prepareResult = top.niunaijun.blackbox.app.NativeLoader.prepare(ctx, bgmiPackageName)
                 if (prepareResult != top.niunaijun.blackbox.app.NativeLoader.PrepareResult.READY) {
@@ -774,8 +856,7 @@ class HomeFragment : Fragment() {
         if (found.isNotEmpty()) {
             promptAutoCopyObbAndLaunch(found.first())
         } else {
-            val protectedFile = ObbManager.findProtectedHostObbFile(requireContext(), bgmiPackageName)
-            showObbMissingDialog(protectedFile)
+            openTelegramObbSource()
         }
     }
 
