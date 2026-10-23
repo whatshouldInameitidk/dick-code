@@ -40,6 +40,7 @@ object AppUpdater {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isChecking = false
+    private var currentDialog: Dialog? = null
 
     /**
      * Checks for updates.
@@ -143,7 +144,7 @@ object AppUpdater {
         // 2. Fallback to raw GitHub content
         var connection: HttpURLConnection? = null
         return try {
-            val url = URL(REMOTE_VERSION_URL)
+            val url = URL("$REMOTE_VERSION_URL?t=${System.currentTimeMillis()}")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 8000
@@ -206,7 +207,14 @@ object AppUpdater {
             return
         }
 
+        currentDialog?.dismiss()
         val dialog = Dialog(activity)
+        currentDialog = dialog
+        dialog.setOnDismissListener {
+            if (currentDialog == dialog) {
+                currentDialog = null
+            }
+        }
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(R.layout.dialog_update_app)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
