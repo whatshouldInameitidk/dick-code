@@ -15,6 +15,7 @@ import java.text.DecimalFormat
 object ObbManager {
     private const val TAG = "ObbManager"
     private const val MIN_OBB_SIZE = 5 * 1024 * 1024L // 5 MB
+    private const val REQUIRED_BGMI_OBB_VERSION = 21535
 
     fun getVirtualObbDir(packageName: String, userId: Int): File {
         val dir = BEnvironment.getExternalObbDir(packageName, userId)
@@ -45,26 +46,7 @@ object ObbManager {
         val candidates = mutableListOf<File>()
         val searchDirs = mutableListOf<File>()
 
-        // 1. Collect all possible version codes
-        val versionCodes = mutableSetOf<Int>()
-        try {
-            val pm = context.packageManager
-            val pInfo = pm.getPackageInfo(packageName, 0)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                versionCodes.add(pInfo.longVersionCode.toInt())
-            } else {
-                @Suppress("DEPRECATION")
-                versionCodes.add(pInfo.versionCode)
-            }
-        } catch (t: Throwable) {}
-
-        try {
-            val vInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, 0, 0)
-            vInfo?.versionCode?.let { versionCodes.add(it) }
-        } catch (t: Throwable) {}
-
-        // Common recent BGMI version codes
-        versionCodes.addAll(listOf(21535, 21530, 21525, 21520, 21515, 21510, 21505, 21500, 21325, 21320, 21315, 21310, 21305, 21300, 20700, 20600))
+        val versionCodes = setOf(REQUIRED_BGMI_OBB_VERSION)
         android.util.Log.d(TAG, "findHostObbFiles for $packageName, versionCodes=$versionCodes")
 
         // 2. Direct OBB locations
@@ -173,13 +155,7 @@ object ObbManager {
     }
 
     fun findProtectedHostObbFile(context: Context, packageName: String): File? {
-        val versionCodes = linkedSetOf<Int>()
-        try {
-            val info = context.packageManager.getPackageInfo(packageName, 0)
-            versionCodes.add(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) info.longVersionCode.toInt() else info.versionCode)
-        } catch (_: Throwable) {
-        }
-        versionCodes.addAll(listOf(21535, 21530, 21525, 21520, 21515, 21510, 21505, 21500, 21325, 21320, 21315, 21310, 21305, 21300, 20700, 20600))
+        val versionCodes = setOf(REQUIRED_BGMI_OBB_VERSION)
 
         val directories = listOf(
             File(Environment.getExternalStorageDirectory(), "Android/obb/$packageName"),
@@ -210,8 +186,7 @@ object ObbManager {
     private fun isValidObbFile(file: File, packageName: String): Boolean {
         if (!file.name.endsWith(".obb", ignoreCase = true)) return false
         if (file.length() <= MIN_OBB_SIZE) return false
-        val name = file.name.lowercase()
-        return name.contains(packageName.lowercase()) || name.startsWith("main.") || name.startsWith("patch.")
+        return file.name.equals("main.$REQUIRED_BGMI_OBB_VERSION.$packageName.obb", ignoreCase = true)
     }
 
     fun copyFileWithProgress(
