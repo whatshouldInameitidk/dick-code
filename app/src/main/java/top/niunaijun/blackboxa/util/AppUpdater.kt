@@ -40,6 +40,7 @@ object AppUpdater {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isChecking = false
+    private var currentDialog: Dialog? = null
 
     /**
      * Checks for updates.
@@ -143,7 +144,7 @@ object AppUpdater {
         // 2. Fallback to raw GitHub content
         var connection: HttpURLConnection? = null
         return try {
-            val url = URL(REMOTE_VERSION_URL)
+            val url = URL("$REMOTE_VERSION_URL?t=${System.currentTimeMillis()}")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 8000
@@ -167,12 +168,53 @@ object AppUpdater {
         }
     }
 
-    private fun showUpdateDialog(activity: Activity, currentVersion: String, remoteVersion: String) {
+    fun showUpdatePrompt(
+        activity: Activity,
+        forceRemoteVersion: String? = null,
+        forceUpdate: Boolean = false
+    ) {
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && activity.isDestroyed)) {
+            return
+        }
+        val currentVersion = try {
+            activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+
+        if (forceRemoteVersion != null) {
+            mainHandler.post {
+                showUpdateDialog(activity, currentVersion, forceRemoteVersion, forceUpdate)
+            }
+            return
+        }
+
+        Thread {
+            val remoteVersion = fetchRemoteVersion() ?: "latest"
+            mainHandler.post {
+                showUpdateDialog(activity, currentVersion, remoteVersion, forceUpdate)
+            }
+        }.start()
+    }
+
+    fun showUpdateDialog(
+        activity: Activity,
+        currentVersion: String,
+        remoteVersion: String,
+        forceUpdate: Boolean = false
+    ) {
         if (activity.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && activity.isDestroyed)) {
             return
         }
 
+        currentDialog?.dismiss()
         val dialog = Dialog(activity)
+        currentDialog = dialog
+        dialog.setOnDismissListener {
+            if (currentDialog == dialog) {
+                currentDialog = null
+            }
+        }
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(R.layout.dialog_update_app)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -194,8 +236,18 @@ object AppUpdater {
         tvVersionInfo.text = "v$currentVersion -> v$remoteVersion"
         tvUpdateMsg.text = "A new version of InvernessLoader (v$remoteVersion) is available with the latest fixes. Tap update to download and install automatically."
 
-        btnUpdateLater.setOnClickListener {
-            dialog.dismiss()
+        if (forceUpdate) {
+            dialog.setCancelable(false)
+            dialog.setCanceledOnTouchOutside(false)
+            btnUpdateLater.text = "Exit App"
+            btnUpdateLater.setOnClickListener {
+                dialog.dismiss()
+                activity.finishAffinity()
+            }
+        } else {
+            btnUpdateLater.setOnClickListener {
+                dialog.dismiss()
+            }
         }
 
         btnUpdateNow.setOnClickListener {

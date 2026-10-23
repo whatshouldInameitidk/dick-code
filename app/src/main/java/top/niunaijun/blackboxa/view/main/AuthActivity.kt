@@ -15,6 +15,7 @@ import top.niunaijun.blackboxa.R
 import top.niunaijun.blackboxa.auth.AuthSession
 import top.niunaijun.blackboxa.auth.KeyAuthClient
 import top.niunaijun.blackboxa.auth.SecureSessionStore
+import top.niunaijun.blackboxa.util.AppUpdater
 
 class AuthActivity : AppCompatActivity() {
     private lateinit var licenseInput: EditText
@@ -34,6 +35,13 @@ class AuthActivity : AppCompatActivity() {
         progress = findViewById(R.id.pb_auth)
         status = findViewById(R.id.tv_auth_status)
         unlockButton.setOnClickListener { authorize(licenseInput.text?.toString().orEmpty()) }
+        status.setOnClickListener {
+            AppUpdater.showUpdatePrompt(this@AuthActivity, forceUpdate = true)
+        }
+
+        // Proactively check for newer APK version on login screen
+        AppUpdater.checkForUpdate(this)
+
         SecureSessionStore.licenseKey(this)?.let {
             licenseInput.setText(it)
             authorize(it)
@@ -55,9 +63,20 @@ class AuthActivity : AppCompatActivity() {
                     AuthSession.authorize()
                     openMain()
                 }
+                is KeyAuthClient.Result.UpdateRequired -> {
+                    setLoading(false, "Update required: ${result.message}")
+                    AppUpdater.showUpdatePrompt(this@AuthActivity, result.latestVersion, forceUpdate = true)
+                }
                 is KeyAuthClient.Result.Rejected -> {
-                    SecureSessionStore.clearLicenseKey(this@AuthActivity)
-                    setLoading(false, result.message)
+                    if (result.message.contains("invalidver", ignoreCase = true) ||
+                        result.message.contains("version", ignoreCase = true)
+                    ) {
+                        setLoading(false, "New version available! Tap here to update.")
+                        AppUpdater.showUpdatePrompt(this@AuthActivity, forceUpdate = true)
+                    } else {
+                        SecureSessionStore.clearLicenseKey(this@AuthActivity)
+                        setLoading(false, result.message)
+                    }
                 }
             }
         }

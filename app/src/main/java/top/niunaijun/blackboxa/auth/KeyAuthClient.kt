@@ -21,6 +21,7 @@ object KeyAuthClient {
 
     sealed class Result {
         data class Authorized(val expiryEpochSeconds: Long?) : Result()
+        data class UpdateRequired(val message: String, val latestVersion: String? = null) : Result()
         data class Rejected(val message: String) : Result()
     }
 
@@ -34,7 +35,15 @@ object KeyAuthClient {
                     "ownerid" to OWNER_ID
                 )
             )
-            if (!init.optBoolean("success")) return@withContext Result.Rejected(init.optString("message", "KeyAuth initialization failed"))
+            if (!init.optBoolean("success")) {
+                val message = init.optString("message", "KeyAuth initialization failed")
+                if (message.contains("invalidver", ignoreCase = true) || message.contains("version", ignoreCase = true)) {
+                    val appInfo = init.optJSONObject("appinfo")
+                    val remoteVer = appInfo?.optString("version")?.takeIf { it.isNotBlank() }
+                    return@withContext Result.UpdateRequired("A new update is available. Please update InvernessLoader.", remoteVer)
+                }
+                return@withContext Result.Rejected(message)
+            }
 
             val sessionId = init.optString("sessionid")
             if (sessionId.isBlank()) return@withContext Result.Rejected("KeyAuth did not return a session")
@@ -58,7 +67,14 @@ object KeyAuthClient {
                     ?.takeIf { it > 0L }
                 Result.Authorized(expiry)
             }
-            else Result.Rejected(license.optString("message", "License was rejected"))
+            else {
+                val message = license.optString("message", "License was rejected")
+                if (message.contains("invalidver", ignoreCase = true) || message.contains("version", ignoreCase = true)) {
+                    Result.UpdateRequired("A new update is available. Please update InvernessLoader.")
+                } else {
+                    Result.Rejected(message)
+                }
+            }
         } catch (error: Exception) {
             Result.Rejected(error.message ?: "Could not contact KeyAuth")
         }

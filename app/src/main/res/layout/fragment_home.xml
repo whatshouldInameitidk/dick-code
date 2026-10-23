@@ -373,6 +373,7 @@
                         app:tint="#FFFFFF" />
 
                     <TextView
+                        android:id="@+id/tv_launch_game_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"

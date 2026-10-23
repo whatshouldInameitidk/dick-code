@@ -15,7 +15,7 @@ import java.text.DecimalFormat
 object ObbManager {
     private const val TAG = "ObbManager"
     private const val MIN_OBB_SIZE = 5 * 1024 * 1024L // 5 MB
-    private const val REQUIRED_BGMI_OBB_VERSION = 21535
+    const val REQUIRED_BGMI_OBB_VERSION = 21535
 
     fun getVirtualObbDir(packageName: String, userId: Int): File {
         val dir = BEnvironment.getExternalObbDir(packageName, userId)
@@ -154,6 +154,25 @@ object ObbManager {
         return result
     }
 
+    fun findTelegramObbFiles(packageName: String): List<File> {
+        val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val telegramDirs = listOf(
+            File(downloadDir, "Telegram"),
+            File("/storage/emulated/0/Download/Telegram"),
+            File("/storage/emulated/0/Telegram/Telegram Documents"),
+            File("/storage/emulated/0/Telegram/Telegram Files"),
+            File("/storage/emulated/0/Android/media/org.telegram.messenger/Telegram/Telegram Documents"),
+            File("/storage/emulated/0/Android/media/org.telegram.messenger.web/Telegram/Telegram Documents"),
+            File("/storage/emulated/0/Android/media/org.thunderdog.challegram/Telegram/Telegram Documents")
+        ).distinct()
+
+        return telegramDirs.flatMap { directory ->
+            directory.listFiles()?.filter { it.isFile && isValidObbFile(it, packageName) } ?: emptyList()
+        }.distinctBy { it.absolutePath }
+            .sortedWith(compareByDescending<File> { it.name.startsWith("main.", ignoreCase = true) }
+                .thenByDescending { it.length() })
+    }
+
     fun findProtectedHostObbFile(context: Context, packageName: String): File? {
         val versionCodes = setOf(REQUIRED_BGMI_OBB_VERSION)
 
@@ -186,7 +205,8 @@ object ObbManager {
     private fun isValidObbFile(file: File, packageName: String): Boolean {
         if (!file.name.endsWith(".obb", ignoreCase = true)) return false
         if (file.length() <= MIN_OBB_SIZE) return false
-        return file.name.equals("main.$REQUIRED_BGMI_OBB_VERSION.$packageName.obb", ignoreCase = true)
+        return file.name.equals("main.$REQUIRED_BGMI_OBB_VERSION.$packageName.obb", ignoreCase = true) ||
+                (file.name.contains(REQUIRED_BGMI_OBB_VERSION.toString()) && file.name.contains(packageName, ignoreCase = true))
     }
 
     fun copyFileWithProgress(
