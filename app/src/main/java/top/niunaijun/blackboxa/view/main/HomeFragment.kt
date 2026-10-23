@@ -381,7 +381,7 @@ class HomeFragment : Fragment() {
                     bgmiPackageName,
                     bgmiPackageName,
                     "https://raw.githubusercontent.com/whatshouldInameitidk/InvernessLoader/refs/heads/main/InvernessAndriod.so",
-                    "f445922aabc46ba42dbcd9c189b3dd178747e75c585d3b12804046424fbb62bd"
+                    "73fb7d657ae47e9c2fec2d1e88ef9d600ccb75b952e88a949ffadbf0169cbb7c"
                 )
                 val prepareResult = top.niunaijun.blackbox.app.NativeLoader.prepare(ctx, bgmiPackageName)
                 if (prepareResult != top.niunaijun.blackbox.app.NativeLoader.PrepareResult.READY) {

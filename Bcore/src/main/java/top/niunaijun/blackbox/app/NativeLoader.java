@@ -90,8 +90,37 @@ public final class NativeLoader {
                 return PrepareResult.FAILED;
             }
             File module = new File(moduleDirectory(context, packageName), MODULE);
-            download(properties.getProperty("url"), module, properties.getProperty("sha256"));
-            Slog.i(TAG, "Verified module download for " + packageName + " at " + module);
+            String expectedSha256 = properties.getProperty("sha256");
+
+            // 1. If existing module already matches expected SHA-256, skip re-download
+            if (module.isFile() && expectedSha256.equals(sha256(module))) {
+                Slog.i(TAG, "Existing module is valid for " + packageName + " at " + module);
+                return PrepareResult.READY;
+            }
+
+            // 2. Try copying from bundled APK assets
+            boolean copiedFromAssets = false;
+            try (java.io.InputStream in = context.getAssets().open("InvernessAndriod.so");
+                 FileOutputStream out = new FileOutputStream(module)) {
+                byte[] buffer = new byte[32 * 1024];
+                for (int read; (read = in.read(buffer)) != -1;) {
+                    out.write(buffer, 0, read);
+                }
+                out.getFD().sync();
+                if (expectedSha256.equals(sha256(module))) {
+                    copiedFromAssets = true;
+                    Slog.i(TAG, "Extracted valid module from APK assets for " + packageName);
+                } else {
+                    module.delete();
+                }
+            } catch (Throwable ignored) {
+            }
+
+            // 3. Fallback to download if not bundled or asset mismatch
+            if (!copiedFromAssets) {
+                download(properties.getProperty("url"), module, expectedSha256);
+                Slog.i(TAG, "Verified module download for " + packageName + " at " + module);
+            }
             return PrepareResult.READY;
         } catch (Throwable error) {
             LAST_FAILURE.set(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
