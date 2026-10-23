@@ -185,10 +185,10 @@ class HomeFragment : Fragment() {
                 viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
                 viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
             } else {
-                val statusText = if (versionName.isNotEmpty()) "Installed • $versionName (OBB Missing)" else "Installed (OBB Missing)"
+                val statusText = if (versionName.isNotEmpty()) "Installed • $versionName • Game data in APK" else "Installed • Game data in APK"
                 viewBinding.tvGameStatus.text = statusText
-                viewBinding.tvGameStatus.setTextColor(Color.parseColor("#FFB300"))
-                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFB300"))
+                viewBinding.tvGameStatus.setTextColor(Color.parseColor("#8EA2B9"))
+                viewBinding.viewStatusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E676"))
             }
 
             viewBinding.layoutInstalledActions.visibility = View.VISIBLE
@@ -351,20 +351,6 @@ class HomeFragment : Fragment() {
     }
 
     private fun launchBgmi() {
-        if (!ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
-            if (!hasHostObbAccess()) {
-                requestHostObbAccess()
-                return
-            }
-            val candidates = ObbManager.findHostObbFiles(requireContext(), bgmiPackageName)
-            if (candidates.isNotEmpty()) {
-                promptAutoCopyObbAndLaunch(candidates.first())
-                return
-            }
-            val protectedFile = ObbManager.findProtectedHostObbFile(requireContext(), bgmiPackageName)
-            showObbMissingDialog(protectedFile)
-            return
-        }
         performDirectLaunch()
     }
 
@@ -753,9 +739,9 @@ class HomeFragment : Fragment() {
                 tvFileSize.text = "($sizeStr • Protected on Device)"
                 tvQuestionMessage.text = "Detected in /Android/obb. Tap AUTO-SCAN or SELECT to copy."
             } else {
-                tvFileName.text = "No OBB installed"
-                tvFileSize.text = "(Game cannot launch without OBB)"
-                tvQuestionMessage.text = "Please select OBB file or tap Auto-Scan."
+                tvFileName.text = "No separate OBB installed"
+                tvFileSize.text = "(This version may include data in its APK)"
+                tvQuestionMessage.text = "Select an OBB only if BGMI asks for one."
             }
         }
 
