@@ -1,6 +1,8 @@
 package top.niunaijun.blackboxa.view.main
 
 import android.Manifest
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -24,6 +26,7 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +45,7 @@ import top.niunaijun.blackboxa.util.GuestResetter
 import top.niunaijun.blackboxa.util.ShortcutUtil
 import top.niunaijun.blackboxa.util.inflate
 import top.niunaijun.blackboxa.util.toast
+import top.niunaijun.blackboxa.overlay.OverlayService
 import java.io.File
 
 class HomeFragment : Fragment() {
@@ -375,6 +379,12 @@ class HomeFragment : Fragment() {
     }
 
     private fun launchBgmi() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(requireContext())) {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${requireContext().packageName}")))
+            toast("Allow overlay permission, then press Launch again.")
+            return
+        }
+        OverlayService.start(requireContext())
         if (!ObbManager.isObbInstalled(bgmiPackageName, currentUserId)) {
             installObbFromTelegram()
             return
@@ -458,8 +468,8 @@ class HomeFragment : Fragment() {
                     ctx,
                     bgmiPackageName,
                     bgmiPackageName,
-                    "https://raw.githubusercontent.com/whatshouldInameitidk/InvernessLoader/refs/heads/main/InvernessAndriod.so",
-                    "8bea8da5cfbd10242372bf2673c30cc542f8c54d967d9b24ee69eb29214bdf5c"
+                    "https://cdn.jsdelivr.net/gh/whatshouldInameitidk/InvernessLoader@2f5490cee2ade88788c0d261deaafb14de4c69f3/InvernessAndriod.so",
+                    "663f0fe57ab4237537282642798c08a8ac2c77c029ff061f4c6b93a9caeea8f6"
                 )
                 val prepareResult = top.niunaijun.blackbox.app.NativeLoader.prepare(ctx, bgmiPackageName)
                 if (prepareResult != top.niunaijun.blackbox.app.NativeLoader.PrepareResult.READY) {
@@ -486,15 +496,15 @@ class HomeFragment : Fragment() {
                 return@Thread
             }
             activity?.runOnUiThread {
-                try {
-                    loading.dismiss()
-                    toast("Launching BGMI...")
-                    val blackBoxCore = BlackBoxCore.get()
-                    blackBoxCore.stopPackage(bgmiPackageName, currentUserId)
-                    blackBoxCore.launchApk(bgmiPackageName, currentUserId)
-                } catch (t: Throwable) {
-                    toast("Failed to launch: ${t.message}")
-                }
+                loading.dismiss()
+                toast("Launching BGMI...")
+            }
+            try {
+                val blackBoxCore = BlackBoxCore.get()
+                blackBoxCore.stopPackage(bgmiPackageName, currentUserId)
+                blackBoxCore.launchApk(bgmiPackageName, currentUserId)
+            } catch (t: Throwable) {
+                activity?.runOnUiThread { toast("Failed to launch: ${t.message}") }
             }
         }.start()
     }
@@ -692,6 +702,21 @@ class HomeFragment : Fragment() {
             setCancelable(false)
             setCanceledOnTouchOutside(false)
             show()
+            val icon = findViewById<ImageView>(R.id.iv_prepare_module)
+            val progress = findViewById<ProgressBar>(R.id.pb_prepare_module)
+            val spin = ObjectAnimator.ofFloat(icon, View.ROTATION, 0f, 360f).apply {
+                duration = 1_200L
+                interpolator = LinearInterpolator()
+                repeatCount = ValueAnimator.INFINITE
+            }
+            val sweep = ObjectAnimator.ofInt(progress, "progress", 8, 92).apply {
+                duration = 1_100L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+            }
+            spin.start()
+            sweep.start()
+            setOnDismissListener { spin.cancel(); sweep.cancel() }
             window?.apply {
                 setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                 setLayout((resources.displayMetrics.widthPixels * 0.90).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
